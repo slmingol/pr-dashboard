@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PR Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔀 Pull Request Dashboard</h1>
+      <button id="refresh-btn" class="btn btn-primary">↻ Refresh</button>
+    </header>
+
+    <div id="loading" class="loading">Loading PRs...</div>
+    <div id="error" class="error hidden"></div>
+
+    <div id="filters" class="filters">
+      <input type="text" id="search" placeholder="Search PRs..." />
+      <select id="state-filter">
+        <option value="all">All States</option>
+        <option value="OPEN">Open</option>
+        <option value="CLOSED">Closed</option>
+        <option value="MERGED">Merged</option>
+      </select>
+    </div>
+
+    <div id="pr-list" class="pr-list"></div>
+
+    <!-- PR Detail Modal -->
+    <div id="modal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

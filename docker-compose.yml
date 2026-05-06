@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  pr-dashboard:
+    build: .
+    container_name: pr-dashboard
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount gh CLI config for authentication
+      - ~/.config/gh:/root/.config/gh:ro
+      
+      # Mount ghreport output (adjust path as needed)
+      - ~/ghreport-output:/data:ro
+      
+      # Optional: mount git config if needed for checkout
+      - ~/.gitconfig:/root/.gitconfig:ro
+      
+      # Optional: mount SSH keys if needed
+      # - ~/.ssh:/root/.ssh:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Path to ghreport output file inside container
+      - GHREPORT_OUTPUT=/data/ghreport.txt
+    restart: unless-stopped
+    networks:
+      - pr-dashboard-net
+
+networks:
+  pr-dashboard-net:
+    driver: bridge

@@ -1,0 +1,12 @@
+# Sample ghreport output format
+# Customize the parser in server.js to match your actual ghreport format
+
+# Basic format (currently supported):
+# owner/repo#PR_NUMBER - PR Title
+
+facebook/react#12345 - Add new hooks API
+vercel/next.js#67890 - Fix image optimization bug
+microsoft/vscode#11111 - Improve terminal performance
+
+# If your ghreport has a different format, update the loadPRsFromGhReport() 
+# function in server.js to parse it correctly.
