@@ -356,7 +356,10 @@ async function addComment(owner, repo, number) {
     true
   );
   
-  if (!comment) return;
+  if (!comment) {
+    hideCommentModal();
+    return;
+  }
   
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/comment`, {
@@ -367,11 +370,14 @@ async function addComment(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
+      hideCommentModal();
       showToast('Comment added successfully', 'success');
     } else {
+      hideCommentModal();
       showToast('Failed to add comment: ' + data.error, 'error');
     }
   } catch (error) {
+    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
@@ -387,7 +393,10 @@ async function reviewPR(owner, repo, number, action) {
     required
   );
   
-  if (comment === null) return; // User cancelled
+  if (comment === null) {
+    hideCommentModal();
+    return; // User cancelled
+  }
   
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
@@ -398,12 +407,15 @@ async function reviewPR(owner, repo, number, action) {
     const data = await response.json();
     
     if (data.success) {
+      hideCommentModal();
       showToast('Review submitted successfully', 'success');
       fetchPRs(); // Refresh
     } else {
+      hideCommentModal();
       showToast('Failed to submit review: ' + data.error, 'error');
     }
   } catch (error) {
+    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
@@ -416,7 +428,10 @@ async function approvePRFromDiff(owner, repo, number) {
     false
   );
   
-  if (comment === null) return; // User cancelled
+  if (comment === null) {
+    hideCommentModal();
+    return; // User cancelled
+  }
   
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
@@ -427,14 +442,16 @@ async function approvePRFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
-      hideCommentModal(); // Ensure comment modal is closed
+      hideCommentModal(); // Close comment modal
       hideModal(); // Close diff modal
       showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
       fetchPRs(); // Refresh
     } else {
+      hideCommentModal();
       showToast('Failed to approve: ' + data.error, 'error');
     }
   } catch (error) {
+    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
@@ -447,7 +464,10 @@ async function requestChangesFromDiff(owner, repo, number) {
     true
   );
   
-  if (!comment) return;
+  if (!comment) {
+    hideCommentModal();
+    return;
+  }
   
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
@@ -458,14 +478,16 @@ async function requestChangesFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
-      hideCommentModal(); // Ensure comment modal is closed
+      hideCommentModal(); // Close comment modal
       hideModal(); // Close diff modal
       showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
       fetchPRs(); // Refresh
     } else {
+      hideCommentModal();
       showToast('Failed to request changes: ' + data.error, 'error');
     }
   } catch (error) {
+    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
@@ -504,7 +526,10 @@ function showCommentModal(title, placeholder = 'Add your comment here...', requi
 
 function hideCommentModal() {
   const modal = document.getElementById('comment-modal');
+  const input = document.getElementById('comment-input');
+  
   modal.classList.add('hidden');
+  input.value = ''; // Clear the textarea
   commentModalCallback = null;
 }
 
@@ -519,7 +544,8 @@ function submitCommentModal() {
     }
     
     commentModalCallback.resolve(comment || null);
-    hideCommentModal();
+    // Don't hide modal here - let calling function handle it after API success
+    commentModalCallback = null;
   }
 }
 
