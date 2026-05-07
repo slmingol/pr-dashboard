@@ -349,52 +349,73 @@ async function checkoutPR(owner, repo, number) {
 }
 
 // Add comment
-function addComment(owner, repo, number) {
-  const comment = prompt(`Add comment to ${owner}/${repo} #${number}:`);
+async function addComment(owner, repo, number) {
+  const comment = await showCommentModal(
+    `Add comment to ${owner}/${repo} #${number}`,
+    'Add your comment here...',
+    true
+  );
+  
   if (!comment) return;
   
-  fetch(`/api/pr/${owner}/${repo}/${number}/comment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body: comment })
-  })
-  .then(r => r.json())
-  .then(data => {
+  try {
+    const response = await fetch(`/api/pr/${owner}/${repo}/${number}/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: comment })
+    });
+    const data = await response.json();
+    
     if (data.success) {
       showToast('Comment added successfully', 'success');
     } else {
       showToast('Failed to add comment: ' + data.error, 'error');
     }
-  })
-  .catch(err => showToast('Error: ' + err.message, 'error'));
+  } catch (error) {
+    showToast('Error: ' + error.message, 'error');
+  }
 }
 
 // Review PR
-function reviewPR(owner, repo, number, action) {
+async function reviewPR(owner, repo, number, action) {
   const actionText = action === 'approve' ? 'Approve' : 'Request Changes';
-  const comment = prompt(`${actionText} ${owner}/${repo} #${number}\n\nOptional comment:`);
+  const required = action === 'request-changes';
+  
+  const comment = await showCommentModal(
+    `${actionText} ${owner}/${repo} #${number}`,
+    required ? 'Comment (required for requesting changes)' : 'Optional comment',
+    required
+  );
+  
   if (comment === null) return; // User cancelled
   
-  fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, body: comment || undefined })
-  })
-  .then(r => r.json())
-  .then(data => {
+  try {
+    const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, body: comment || undefined })
+    });
+    const data = await response.json();
+    
     if (data.success) {
       showToast('Review submitted successfully', 'success');
       fetchPRs(); // Refresh
     } else {
       showToast('Failed to submit review: ' + data.error, 'error');
     }
-  })
-  .catch(err => showToast('Error: ' + err.message, 'error'));
+  } catch (error) {
+    showToast('Error: ' + error.message, 'error');
+  }
 }
 
 // Approve PR from diff view
 async function approvePRFromDiff(owner, repo, number) {
-  const comment = prompt(`Approve ${owner}/${repo} #${number}\n\nOptional comment:`);
+  const comment = await showCommentModal(
+    `Approve ${owner}/${repo} #${number}`,
+    'Optional comment',
+    false
+  );
+  
   if (comment === null) return; // User cancelled
   
   try {
@@ -419,11 +440,13 @@ async function approvePRFromDiff(owner, repo, number) {
 
 // Request changes from diff view
 async function requestChangesFromDiff(owner, repo, number) {
-  const comment = prompt(`Request changes for ${owner}/${repo} #${number}\n\nComment (required):`);
-  if (!comment) {
-    showToast('Comment required when requesting changes', 'warning');
-    return;
-  }
+  const comment = await showCommentModal(
+    `Request changes for ${owner}/${repo} #${number}`,
+    'Comment (required)',
+    true
+  );
+  
+  if (!comment) return;
   
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
@@ -455,6 +478,54 @@ function showModal(content) {
 
 function hideModal() {
   document.getElementById('modal').classList.add('hidden');
+}
+
+// Comment modal functions
+let commentModalCallback = null;
+
+function showCommentModal(title, placeholder = 'Add your comment here...', required = false) {
+  return new Promise((resolve, reject) => {
+    const modal = document.getElementById('comment-modal');
+    const modalTitle = document.getElementById('comment-modal-title');
+    const input = document.getElementById('comment-input');
+    const submitBtn = document.getElementById('comment-submit');
+    
+    modalTitle.textContent = title;
+    input.placeholder = placeholder;
+    input.value = '';
+    modal.classList.remove('hidden');
+    input.focus();
+    
+    commentModalCallback = { resolve, reject, required };
+  });
+}
+
+function hideCommentModal() {
+  const modal = document.getElementById('comment-modal');
+  modal.classList.add('hidden');
+  commentModalCallback = null;
+}
+
+function submitCommentModal() {
+  const input = document.getElementById('comment-input');
+  const comment = input.value.trim();
+  
+  if (commentModalCallback) {
+    if (commentModalCallback.required && !comment) {
+      showToast('Comment is required', 'warning');
+      return;
+    }
+    
+    commentModalCallback.resolve(comment || null);
+    hideCommentModal();
+  }
+}
+
+function cancelCommentModal() {
+  if (commentModalCallback) {
+    commentModalCallback.resolve(null);
+    hideCommentModal();
+  }
 }
 
 // Utility functions
@@ -518,6 +589,21 @@ document.getElementById('show-hidden').addEventListener('change', filterAndRende
 document.querySelector('.close').addEventListener('click', hideModal);
 document.getElementById('modal').addEventListener('click', (e) => {
   if (e.target.id === 'modal') hideModal();
+});
+
+// Comment modal event listeners
+document.querySelector('.close-comment').addEventListener('click', cancelCommentModal);
+document.getElementById('comment-cancel').addEventListener('click', cancelCommentModal);
+document.getElementById('comment-submit').addEventListener('click', submitCommentModal);
+document.getElementById('comment-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'comment-modal') cancelCommentModal();
+});
+document.getElementById('comment-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    submitCommentModal();
+  } else if (e.key === 'Escape') {
+    cancelCommentModal();
+  }
 });
 
 // Initial load
