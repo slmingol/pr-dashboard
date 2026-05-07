@@ -1,12 +1,11 @@
 # Sample ghreport output format
-# Customize the parser in server.js to match your actual ghreport format
+# This is the actual format from your ghreport tool
 
-# Basic format (currently supported):
-# owner/repo#PR_NUMBER - PR Title
+https://github.com/Bandwidth/datadog-operations/pull/1919 author: aphifer44 Age: 9 days reviewDecision: 🔍 mergeable:
+https://github.com/Bandwidth/datadog-operations/pull/1928 author: rdinardi-bw Age: 8 days reviewDecision: 🔍 mergeable: ✅
+https://github.com/Bandwidth/datadog-operations/pull/1930 author: laurelstreng Age: 7 days reviewDecision: 🔍 mergeable: ✅
 
-facebook/react#12345 - Add new hooks API
-vercel/next.js#67890 - Fix image optimization bug
-microsoft/vscode#11111 - Improve terminal performance
-
-# If your ghreport has a different format, update the loadPRsFromGhReport() 
-# function in server.js to parse it correctly.
+# To use with dashboard:
+# 1. Run: ghreport > ~/ghreport-output/ghreport.txt
+# 2. Or set up a cron job to periodically update it
+# 3. Or the dashboard will try to run ghreport command directly if the file doesn't exist

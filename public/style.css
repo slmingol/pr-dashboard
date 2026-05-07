@@ -184,8 +184,13 @@ h1 {
   color: white;
 }
 
-.state-merged {
-  background: var(--primary);
+.state-approved {
+  background: var(--success);
+  color: white;
+}
+
+.state-review_required {
+  background: var(--warning);
   color: white;
 }
 

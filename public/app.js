@@ -55,6 +55,14 @@ function renderPRs(prs) {
     const number = pr.number;
     const state = pr.state || 'OPEN';
     
+    // Format metadata if available
+    const metadata = pr.metadata || {};
+    const metadataHtml = metadata.age ? `
+      <span>⏰ ${metadata.age}</span>
+      ${metadata.reviewDecision ? `<span>${metadata.reviewDecision}</span>` : ''}
+      ${metadata.mergeable ? `<span>Merge: ${metadata.mergeable}</span>` : ''}
+    ` : '';
+    
     return `
       <div class="pr-card" data-owner="${owner}" data-repo="${repo}" data-number="${number}">
         <div class="pr-header">
@@ -64,7 +72,8 @@ function renderPRs(prs) {
               <span>📦 ${owner}/${repo}</span>
               <span>#${number}</span>
               ${pr.author?.login ? `<span>👤 ${pr.author.login}</span>` : ''}
-              <span class="state-badge state-${state.toLowerCase()}">${state}</span>
+              ${metadataHtml}
+              <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
             </div>
           </div>
         </div>

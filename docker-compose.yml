@@ -10,7 +10,7 @@ services:
       # Mount gh CLI config for authentication
       - ~/.config/gh:/root/.config/gh:ro
       
-      # Mount ghreport output (adjust path as needed)
+      # Mount ghreport output directory (create if doesn't exist)
       - ~/ghreport-output:/data:ro
       
       # Optional: mount git config if needed for checkout
@@ -18,6 +18,9 @@ services:
       
       # Optional: mount SSH keys if needed
       # - ~/.ssh:/root/.ssh:ro
+      
+      # Optional: mount ghreport binary if it's a custom tool
+      # - /path/to/ghreport:/usr/local/bin/ghreport:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
