@@ -264,9 +264,14 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
       cmd += ` --body ${JSON.stringify(body)}`;
     }
     
-    const { stdout } = await execAsync(cmd);
+    console.log(`Executing review command: ${cmd}`);
+    const { stdout, stderr } = await execAsync(cmd);
+    console.log(`Review command output: ${stdout}`);
+    if (stderr) console.log(`Review command stderr: ${stderr}`);
+    
     res.json({ success: true, output: stdout });
   } catch (error) {
+    console.error(`Review command failed: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
