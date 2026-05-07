@@ -601,6 +601,35 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Refresh ghreport data
+async function refreshGhReport() {
+  const btn = document.getElementById('refresh-ghreport-btn');
+  const originalText = btn.textContent;
+  
+  try {
+    btn.disabled = true;
+    btn.textContent = '🔄 Running...';
+    
+    const response = await fetch('/api/refresh-ghreport', {
+      method: 'POST'
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`✓ ${data.message}`, 'success', 'Data Refreshed');
+      // Automatically reload the PR list after successful refresh
+      setTimeout(() => fetchPRs(), 500);
+    } else {
+      showToast(`Failed to refresh: ${data.message || data.error}`, 'error', 'Refresh Failed');
+    }
+  } catch (error) {
+    showToast(`Error refreshing data: ${error.message}`, 'error', 'Network Error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 // Theme toggle functionality
 function toggleTheme() {
   const root = document.documentElement;
@@ -633,6 +662,7 @@ function loadTheme() {
 
 // Event listeners
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
 document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);

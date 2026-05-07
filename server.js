@@ -280,6 +280,44 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.post('/api/refresh-ghreport', async (req, res) => {
+  try {
+    console.log('Running ghreport command...');
+    const { stdout, stderr } = await execAsync('ghreport');
+    
+    if (stderr) {
+      console.log('ghreport stderr:', stderr);
+    }
+    
+    // Optionally write to file if GHREPORT_OUTPUT is set
+    const outputPath = process.env.GHREPORT_OUTPUT;
+    if (outputPath) {
+      try {
+        await fs.writeFile(outputPath, stdout, 'utf-8');
+        console.log(`Updated ghreport output file: ${outputPath}`);
+      } catch (writeError) {
+        console.error(`Failed to write to ${outputPath}:`, writeError.message);
+      }
+    }
+    
+    const lineCount = stdout.split('\n').filter(line => line.trim()).length;
+    console.log(`ghreport completed. Found ${lineCount} PRs`);
+    
+    res.json({ 
+      success: true, 
+      message: `Refreshed PR data. Found ${lineCount} PRs.`,
+      prCount: lineCount
+    });
+  } catch (error) {
+    console.error('ghreport command failed:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      message: 'Failed to run ghreport. Make sure it is installed and in PATH.'
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`PR Dashboard running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
