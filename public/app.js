@@ -168,7 +168,14 @@ async function viewDetails(owner, repo, number) {
         </div>
       `);
     } else {
-      showToast('Failed to fetch PR details: ' + data.error, 'error');
+      const errorMsg = data.error || 'Unknown error';
+      if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+        showToast(`PR #${number} not found. It may have been deleted or the number is incorrect.`, 'error', 'PR Not Found');
+      } else if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
+        showToast('Access denied. You may not have permission to view this PR.', 'error', 'Access Denied');
+      } else {
+        showToast('Failed to fetch PR details: ' + errorMsg, 'error');
+      }
     }
   } catch (error) {
     showToast('Error: ' + error.message, 'error');
@@ -194,7 +201,14 @@ async function viewDiff(owner, repo, number) {
         <div class="diff-container">${diffHtml}</div>
       `);
     } else {
-      showToast('Failed to fetch diff: ' + data.error, 'error');
+      const errorMsg = data.error || 'Unknown error';
+      if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+        showToast(`PR #${number} not found. It may have been deleted or the number is incorrect.`, 'error', 'PR Not Found');
+      } else if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
+        showToast('Access denied. You may not have permission to view this PR.', 'error', 'Access Denied');
+      } else {
+        showToast('Failed to fetch diff: ' + errorMsg, 'error');
+      }
     }
   } catch (error) {
     showToast('Error: ' + error.message, 'error');
@@ -210,7 +224,14 @@ async function checkoutPR(owner, repo, number) {
       method: 'POST'
     });
     const data = await response.json();
-    
+    const errorMsg = data.error || 'Unknown error';
+      if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+        showToast(`PR #${number} not found. It may have been deleted or merged.`, 'error', 'PR Not Found');
+      } else if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
+        showToast('Access denied. Check your GitHub authentication.', 'error', 'Access Denied');
+      } else {
+        showToast('Failed to checkout PR: ' + errorMsg, 'error');
+      }
     if (data.success) {
       showToast('PR checked out successfully', 'success');
       if (data.output) {
