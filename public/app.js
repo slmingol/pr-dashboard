@@ -38,6 +38,19 @@ function updateHiddenCount() {
   }
 }
 
+// Update statistics
+function updateStats() {
+  const total = allPRs.length;
+  const hidden = hiddenPRs.size;
+  const visible = total - hidden;
+  const filtered = filteredPRs.length;
+  
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-visible').textContent = visible;
+  document.getElementById('stat-hidden').textContent = hidden;
+  document.getElementById('stat-filtered').textContent = filtered;
+}
+
 // Toast notification system
 function showToast(message, type = 'info', title = '', duration = 5000) {
   const container = document.getElementById('toast-container');
@@ -88,6 +101,7 @@ async function fetchPRs() {
     
     if (data.success) {
       allPRs = data.prs;
+      updateStats();
       filterAndRenderPRs();
       if (data.prs.length > 0) {
         showToast(`Loaded ${data.prs.length} pull requests`, 'success', '', 3000);
@@ -125,6 +139,7 @@ function filterAndRenderPRs() {
   });
   
   renderPRs(filteredPRs);
+  updateStats();
 }
 
 // Render PR list

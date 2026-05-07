@@ -16,6 +16,25 @@
     <div id="loading" class="loading">Loading PRs...</div>
     <div id="error" class="error hidden"></div>
 
+    <div id="stats" class="stats">
+      <div class="stat-item">
+        <span class="stat-label">Total PRs</span>
+        <span class="stat-value" id="stat-total">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Visible</span>
+        <span class="stat-value stat-success" id="stat-visible">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Hidden</span>
+        <span class="stat-value stat-muted" id="stat-hidden">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Filtered</span>
+        <span class="stat-value stat-primary" id="stat-filtered">0</span>
+      </div>
+    </div>
+
     <div id="filters" class="filters">
       <input type="text" id="search" placeholder="Search PRs..." />
       <select id="state-filter">
