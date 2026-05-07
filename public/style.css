@@ -26,7 +26,7 @@ body {
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -133,6 +133,8 @@ h1 {
 .btn-small {
   padding: 0.3125rem 0.625rem;
   font-size: 0.75rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .filters {
@@ -244,6 +246,9 @@ h1 {
   border-radius: 0.375rem;
   padding: 0.75rem 1rem;
   transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
 }
 
 .pr-card.hidden {
@@ -264,6 +269,12 @@ h1 {
   margin-bottom: 0.75rem;
 }
 
+.pr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+}
+
 .pr-title {
   font-size: 0.9375rem;
   font-weight: 600;
@@ -276,15 +287,16 @@ h1 {
   gap: 0.75rem;
   font-size: 0.8125rem;
   color: var(--text-muted);
-  margin-bottom: 0.625rem;
   flex-wrap: wrap;
   align-items: center;
 }
 
 .pr-actions {
   display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .state-badge {
