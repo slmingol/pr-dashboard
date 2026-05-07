@@ -231,12 +231,12 @@ function renderPRs(prs, showHidden = false) {
                 ${isHidden ? '👁' : '🙈'}
               </button>
               <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')">Details</button>
-              <button class="btn btn-small btn-primary" onclick="viewDiff('${owner}', '${repoName}', '${number}')">Diff</button>
+              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')">Diff</button>
               <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')">Checkout</button>
-              <button class="btn btn-small btn-primary" onclick="addComment('${owner}', '${repoName}', '${number}')">Comment</button>
+              <button class="btn btn-small btn-warning" onclick="addComment('${owner}', '${repoName}', '${number}')">Comment</button>
               <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'approve')">✓</button>
               <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'request-changes')">✗</button>
-              <a href="${pr.url}" target="_blank" class="btn btn-small">Open →</a>
+              <a href="${pr.url}" target="_blank" class="btn btn-small btn-muted">Open →</a>
             </div>
           </div>
         </div>
