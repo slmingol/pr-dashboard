@@ -45,50 +45,57 @@ async function loadPRsFromGhReport() {
 // Fetch PRs using gh CLI directly (searches across all repos)
 async function fetchPRsWithGh() {
   try {
-    // Use gh pr status to get PRs across all repos (created by, assigned, review requested, or mentioned)
-    const { stdout } = await execAsync('gh pr status --json createdBy,needsReview,reviewRequests');
-    const status = JSON.parse(stdout);
+    // Use gh pr status text output and parse it
+    const { stdout } = await execAsync('gh pr status');
     
-    // Combine all PR categories
-    const allPRs = [
-      ...(status.createdBy || []),
-      ...(status.needsReview || []),
-      ...(status.reviewRequests || [])
-    ];
+    // Parse text output format:
+    // Relevant pull requests in owner/repo
+    //   #123  PR title [branch]
+    //
+    // Created by you
+    //   owner/repo#456  PR title [branch]
     
-    // Deduplicate by URL
-    const seen = new Set();
-    const uniquePRs = allPRs.filter(pr => {
-      if (seen.has(pr.url)) return false;
-      seen.add(pr.url);
-      return true;
-    });
+    const prs = [];
+    const lines = stdout.split('\n');
     
-    // Transform to match expected format
-    return uniquePRs.map(pr => {
-      // Extract repo from URL (format: https://github.com/owner/repo/pull/123)
-      let repo = '';
-      if (pr.url) {
-        const match = pr.url.match(/github\.com\/([^\/]+\/[^\/]+)\/pull/);
-        if (match) {
-          repo = match[1];
+    for (const line of lines) {
+      // Match patterns like "  owner/repo#123  Title [branch]" or "  #123  Title [branch]"
+      const match = line.match(/^\s+(?:([^#\s]+)#)?(\d+)\s+(.+?)(?:\s+\[|$)/);
+      if (match) {
+        const [, repoPrefix, number, title] = match;
+        let repo = repoPrefix || '';
+        
+        // If no repo prefix, look backwards for "Relevant pull requests in owner/repo"
+        if (!repo) {
+          for (let i = lines.indexOf(line) - 1; i >= 0; i--) {
+            const repoLine = lines[i].match(/^Relevant pull requests in (.+)/);
+            if (repoLine) {
+              repo = repoLine[1];
+              break;
+            }
+          }
+        }
+        
+        if (repo && number && title) {
+          prs.push({
+            number: parseInt(number),
+            title: title.trim(),
+            url: `https://github.com/${repo}/pull/${number}`,
+            state: 'OPEN',
+            repo,
+            repository: { nameWithOwner: repo },
+            author: { login: 'unknown' },
+            updatedAt: new Date().toISOString()
+          });
         }
       }
-      
-      return {
-        number: pr.number,
-        title: pr.title || pr.headRefName || 'Untitled',
-        url: pr.url,
-        state: pr.state || pr.isDraft ? 'DRAFT' : 'OPEN',
-        repo,
-        repository: { nameWithOwner: repo },
-        author: pr.author || { login: 'unknown' },
-        updatedAt: pr.updatedAt || new Date().toISOString()
-      };
-    });
+    }
+    
+    return prs;
   } catch (error) {
     console.error('Error fetching with gh:', error.message);
-    throw error;
+    // Return empty array instead of throwing - allows dashboard to work with just ghreport
+    return [];
   }
 }
 
