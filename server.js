@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
@@ -280,6 +280,102 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// SSE endpoint for ghreport refresh with progress tracking
+app.get('/api/refresh-ghreport-stream', async (req, res) => {
+  // Set up SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  const sendProgress = (percent, message) => {
+    res.write(`data: ${JSON.stringify({ progress: percent, message })}\n\n`);
+  };
+  
+  try {
+    sendProgress(0, 'Starting ghreport...');
+    
+    // Start ghreport command
+    const startTime = Date.now();
+    sendProgress(10, 'Querying GitHub API...');
+    
+    // Use spawn to capture output as it comes
+    const ghreport = spawn('ghreport');
+    
+    let stdout = '';
+    let stderr = '';
+    let progressPercent = 10;
+    
+    // Simulate progress based on time (since ghreport doesn't report actual progress)
+    const progressInterval = setInterval(() => {
+      if (progressPercent < 90) {
+        progressPercent += Math.random() * 15;
+        if (progressPercent > 90) progressPercent = 90;
+        sendProgress(Math.floor(progressPercent), 'Fetching PRs from repositories...');
+      }
+    }, 1000);
+    
+    ghreport.stdout.on('data', (data) => {
+      stdout += data.toString();
+      // Count lines received so far for more accurate progress
+      const currentLines = stdout.split('\n').filter(l => l.trim()).length;
+      if (currentLines > 0) {
+        sendProgress(Math.floor(progressPercent), `Found ${currentLines} PRs so far...`);
+      }
+    });
+    
+    ghreport.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    ghreport.on('close', async (code) => {
+      clearInterval(progressInterval);
+      
+      if (code !== 0) {
+        sendProgress(100, 'Error');
+        res.write(`data: ${JSON.stringify({ 
+          error: true, 
+          message: `ghreport exited with code ${code}: ${stderr}` 
+        })}\n\n`);
+        res.end();
+        return;
+      }
+      
+      sendProgress(95, 'Processing results...');
+      
+      // Optionally write to file if GHREPORT_OUTPUT is set
+      const outputPath = process.env.GHREPORT_OUTPUT;
+      if (outputPath) {
+        try {
+          await fs.writeFile(outputPath, stdout, 'utf-8');
+          console.log(`Updated ghreport output file: ${outputPath}`);
+        } catch (writeError) {
+          console.error(`Failed to write to ${outputPath}:`, writeError.message);
+        }
+      }
+      
+      const lineCount = stdout.split('\n').filter(line => line.trim()).length;
+      console.log(`ghreport completed. Found ${lineCount} PRs`);
+      
+      sendProgress(100, `Completed! Found ${lineCount} PRs.`);
+      res.write(`data: ${JSON.stringify({ 
+        success: true, 
+        prCount: lineCount,
+        complete: true
+      })}\n\n`);
+      res.end();
+    });
+    
+  } catch (error) {
+    console.error('ghreport command failed:', error.message);
+    res.write(`data: ${JSON.stringify({ 
+      error: true, 
+      message: error.message 
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// Legacy POST endpoint for compatibility
 app.post('/api/refresh-ghreport', async (req, res) => {
   try {
     console.log('Running ghreport command...');

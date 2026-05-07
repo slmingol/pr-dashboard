@@ -605,28 +605,63 @@ function escapeHtml(text) {
 async function refreshGhReport() {
   const btn = document.getElementById('refresh-ghreport-btn');
   const progressContainer = document.getElementById('refresh-progress');
+  const progressFill = document.querySelector('.progress-fill');
+  const progressText = document.querySelector('.progress-text');
   const originalText = btn.textContent;
   
   try {
     btn.disabled = true;
     btn.textContent = '⏳ Running...';
     progressContainer.classList.remove('hidden');
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Starting...';
     
-    const response = await fetch('/api/refresh-ghreport', {
-      method: 'POST'
-    });
-    const data = await response.json();
+    // Use EventSource for Server-Sent Events
+    const eventSource = new EventSource('/api/refresh-ghreport-stream');
     
-    if (data.success) {
-      showToast(`✓ ${data.message}`, 'success', 'Data Refreshed');
-      // Automatically reload the PR list after successful refresh
-      setTimeout(() => fetchPRs(), 500);
-    } else {
-      showToast(`Failed to refresh: ${data.message || data.error}`, 'error', 'Refresh Failed');
-    }
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.error) {
+        showToast(`Failed to refresh: ${data.message}`, 'error', 'Refresh Failed');
+        eventSource.close();
+        progressContainer.classList.add('hidden');
+        btn.disabled = false;
+        btn.textContent = originalText;
+        return;
+      }
+      
+      if (data.progress !== undefined) {
+        progressFill.style.width = `${data.progress}%`;
+        if (data.message) {
+          progressText.textContent = data.message;
+        }
+      }
+      
+      if (data.complete) {
+        eventSource.close();
+        showToast(`✓ Refreshed PR data. Found ${data.prCount} PRs.`, 'success', 'Data Refreshed');
+        // Automatically reload the PR list after successful refresh
+        setTimeout(() => {
+          fetchPRs();
+          progressContainer.classList.add('hidden');
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }, 500);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      eventSource.close();
+      showToast('Connection error during refresh', 'error', 'Network Error');
+      progressContainer.classList.add('hidden');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    };
+    
   } catch (error) {
     showToast(`Error refreshing data: ${error.message}`, 'error', 'Network Error');
-  } finally {
     progressContainer.classList.add('hidden');
     btn.disabled = false;
     btn.textContent = originalText;

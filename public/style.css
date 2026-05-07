@@ -281,9 +281,15 @@ h1 {
 
 .progress-fill {
   height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--primary));
+  border-radius: 0.25rem;
+  transition: width 0.3s ease-out;
+  width: 0%;
+}
+
+.progress-fill.indeterminate {
   background: linear-gradient(90deg, var(--success), var(--primary), var(--success));
   background-size: 200% 100%;
-  border-radius: 0.25rem;
   animation: progress-animation 2s linear infinite;
   width: 100%;
 }
