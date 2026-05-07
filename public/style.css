@@ -317,6 +317,13 @@ h1 {
   color: var(--primary);
   font-size: 0.875rem;
   flex-shrink: 0;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.pr-number:hover {
+  text-decoration: underline;
+  color: var(--primary-hover);
 }
 
 .pr-title {

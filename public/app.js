@@ -206,12 +206,16 @@ function renderPRs(prs, showHidden = false) {
         }
       }
       
+      // Check if title is just generic "PR #X" format
+      const genericTitle = `PR #${number}`;
+      const hasRealTitle = pr.title && pr.title !== genericTitle && pr.title !== 'Untitled PR';
+      
       html += `
         <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
             <div class="pr-info">
-              <span class="pr-number">#${number}</span>
-              <span class="pr-title">${pr.title || 'Untitled PR'}</span>
+              <a href="${pr.url}" target="_blank" class="pr-number" title="Open PR in GitHub">#${number}</a>
+              ${hasRealTitle ? `<span class="pr-title">${pr.title}</span>` : ''}
               <span class="pr-meta-inline">
                 ${pr.author?.login ? `👤 ${pr.author.login}` : ''}
                 ${age ? `• ⏰ ${age}` : ''}
