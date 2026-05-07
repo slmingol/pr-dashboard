@@ -1,7 +1,14 @@
 FROM node:18-alpine
 
-# Install gh CLI
-RUN apk add --no-cache github-cli git
+# Install gh CLI, git, and Go (for ghreport)
+RUN apk add --no-cache github-cli git go
+
+# Install ghreport (allow Go to auto-download required toolchain version)
+ENV GOTOOLCHAIN=auto
+RUN go install github.com/jmainguy/ghreport@latest
+
+# Add Go bin to PATH
+ENV PATH="/root/go/bin:${PATH}"
 
 WORKDIR /app
 
