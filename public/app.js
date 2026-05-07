@@ -561,7 +561,9 @@ function submitCommentModal() {
       return;
     }
     
-    commentModalCallback.resolve(comment || null);
+    // Resolve with the comment string (empty string "" is valid for optional comments)
+    // Only null indicates cancellation
+    commentModalCallback.resolve(comment);
     // Don't hide modal here - let calling function handle it after API success
     commentModalCallback = null;
   }
