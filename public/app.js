@@ -151,65 +151,101 @@ function renderPRs(prs) {
     return;
   }
   
-  prList.innerHTML = prs.map(pr => {
-    const [owner, repo] = (pr.repository?.nameWithOwner || pr.repo || '').split('/');
-    const number = pr.number;
-    const state = pr.state || 'OPEN';
-    const prId = `${pr.repo}#${number}`;
-    const isHidden = hiddenPRs.has(prId);
+  // Group PRs by repository
+  const grouped = {};
+  prs.forEach(pr => {
+    const repo = pr.repo || pr.repository?.nameWithOwner || 'Unknown';
+    if (!grouped[repo]) {
+      grouped[repo] = [];
+    }
+    grouped[repo].push(pr);
+  });
+  
+  // Sort repositories alphabetically and sort PRs within each repo by number (descending)
+  const sortedRepos = Object.keys(grouped).sort();
+  sortedRepos.forEach(repo => {
+    grouped[repo].sort((a, b) => b.number - a.number);
+  });
+  
+  // Render grouped PRs
+  let html = '';
+  sortedRepos.forEach(repo => {
+    const repoPRs = grouped[repo];
+    html += `
+      <div class="repo-group">
+        <div class="repo-header">
+          <h2 class="repo-name">📦 ${repo}</h2>
+          <span class="repo-count">${repoPRs.length} PR${repoPRs.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="repo-prs">
+    `;
     
-    // Format metadata if available
-    const metadata = pr.metadata || {};
-    const metadataHtml = metadata.age ? `
-      <span>⏰ ${metadata.age}</span>
-      ${metadata.reviewDecision ? `<span>${metadata.reviewDecision}</span>` : ''}
-      ${metadata.mergeable ? `<span>Merge: ${metadata.mergeable}</span>` : ''}
-    ` : '';
-    
-    return `
-      <div class="pr-card ${isHidden ? 'hidden' : ''}" data-owner="${owner}" data-repo="${repo}" data-number="${number}">
-        <div class="pr-header">
-          <div>
-            <h3 class="pr-title">${pr.title || 'Untitled PR'}</h3>
-            <div class="pr-meta">
-              <span>📦 ${owner}/${repo}</span>
-              <span>#${number}</span>
-              ${pr.author?.login ? `<span>👤 ${pr.author.login}</span>` : ''}
-              ${metadataHtml}
-              <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
-              ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
+    repoPRs.forEach(pr => {
+      const [owner, repoName] = (pr.repository?.nameWithOwner || pr.repo || '').split('/');
+      const number = pr.number;
+      const state = pr.state || 'OPEN';
+      const prId = `${pr.repo}#${number}`;
+      const isHidden = hiddenPRs.has(prId);
+      
+      // Format metadata if available
+      const metadata = pr.metadata || {};
+      const metadataHtml = metadata.age ? `
+        <span>⏰ ${metadata.age}</span>
+        ${metadata.reviewDecision ? `<span>${metadata.reviewDecision}</span>` : ''}
+        ${metadata.mergeable ? `<span>Merge: ${metadata.mergeable}</span>` : ''}
+      ` : '';
+      
+      html += `
+        <div class="pr-card ${isHidden ? 'hidden' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
+          <div class="pr-header">
+            <div>
+              <h3 class="pr-title">${pr.title || 'Untitled PR'}</h3>
+              <div class="pr-meta">
+                <span>#${number}</span>
+                ${pr.author?.login ? `<span>👤 ${pr.author.login}</span>` : ''}
+                ${metadataHtml}
+                <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
+                ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
+              </div>
             </div>
           </div>
+          <div class="pr-actions">
+            <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repoName}', '${number}')">
+              ${isHidden ? '👁 Unhide' : '🙈 Hide'}
+            </button>
+            <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')">
+              View Details
+            </button>
+            <button class="btn btn-small btn-primary" onclick="viewDiff('${owner}', '${repoName}', '${number}')">
+              View Diff
+            </button>
+            <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')">
+              Checkout
+            </button>
+            <button class="btn btn-small btn-primary" onclick="addComment('${owner}', '${repoName}', '${number}')">
+              Comment
+            </button>
+            <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'approve')">
+              ✓ Approve
+            </button>
+            <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'request-changes')">
+              ✗ Request Changes
+            </button>
+            <a href="${pr.url}" target="_blank" class="btn btn-small" style="text-decoration:none">
+              Open in Browser →
+            </a>
+          </div>
         </div>
-        <div class="pr-actions">
-          <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repo}', '${number}')">
-            ${isHidden ? '👁 Unhide' : '🙈 Hide'}
-          </button>
-          <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repo}', '${number}')">
-            View Details
-          </button>
-          <button class="btn btn-small btn-primary" onclick="viewDiff('${owner}', '${repo}', '${number}')">
-            View Diff
-          </button>
-          <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repo}', '${number}')">
-            Checkout
-          </button>
-          <button class="btn btn-small btn-primary" onclick="addComment('${owner}', '${repo}', '${number}')">
-            Comment
-          </button>
-          <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repo}', '${number}', 'approve')">
-            ✓ Approve
-          </button>
-          <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repo}', '${number}', 'request-changes')">
-            ✗ Request Changes
-          </button>
-          <a href="${pr.url}" target="_blank" class="btn btn-small" style="text-decoration:none">
-            Open in Browser →
-          </a>
+      `;
+    });
+    
+    html += `
         </div>
       </div>
     `;
-  }).join('');
+  });
+  
+  prList.innerHTML = html;
 }
 
 // View PR details
