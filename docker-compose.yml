@@ -11,7 +11,7 @@ services:
       - ~/.config/gh:/root/.config/gh:ro
       
       # Mount ghreport output directory (create if doesn't exist)
-      - ~/ghreport-output:/data:ro
+      - ~/ghreport-output:/data
       
       # Optional: mount git config if needed for checkout
       - ~/.gitconfig:/root/.gitconfig:ro

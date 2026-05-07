@@ -42,13 +42,22 @@ function updateHiddenCount() {
 function updateStats() {
   const total = allPRs.length;
   const hidden = hiddenPRs.size;
-  const visible = total - hidden;
-  const filtered = filteredPRs.length;
+  const displayed = filteredPRs.length; // Actually visible on screen
+  // Count PRs that match filters but might be hidden
+  const matchingFilters = allPRs.filter(pr => {
+    const searchTerm = document.getElementById('search').value.toLowerCase();
+    const stateFilter = document.getElementById('state-filter').value;
+    const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) || 
+                         pr.repo?.toLowerCase().includes(searchTerm) ||
+                         pr.number?.toString().includes(searchTerm);
+    const matchesState = stateFilter === 'all' || pr.state === stateFilter;
+    return matchesSearch && matchesState;
+  }).length;
   
   document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-visible').textContent = visible;
+  document.getElementById('stat-visible').textContent = displayed;
   document.getElementById('stat-hidden').textContent = hidden;
-  document.getElementById('stat-filtered').textContent = filtered;
+  document.getElementById('stat-filtered').textContent = matchingFilters;
 }
 
 // Toast notification system
