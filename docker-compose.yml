@@ -26,6 +26,9 @@ services:
       - PORT=3000
       # Path to ghreport output file inside container
       - GHREPORT_OUTPUT=/data/ghreport.txt
+      # GitHub token for gh CLI (required since container can't access macOS keychain)
+      # Get token: gh auth token
+      - GH_TOKEN=${GH_TOKEN:-}
     restart: unless-stopped
     networks:
       - pr-dashboard-net
