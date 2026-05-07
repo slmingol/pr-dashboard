@@ -42,11 +42,31 @@ async function loadPRsFromGhReport() {
   }
 }
 
-// Fetch PRs using gh CLI directly
+// Fetch PRs using gh CLI directly (searches across all repos)
 async function fetchPRsWithGh() {
   try {
-    const { stdout } = await execAsync('gh pr list --json number,title,url,state,repository,author,updatedAt --limit 100');
-    return JSON.parse(stdout);
+    // Use gh search to find PRs across all repositories involving the user
+    // Search for open PRs, can be modified to include closed: involves:@me state:open OR state:closed
+    const { stdout } = await execAsync('gh search prs --involves=@me --state=open --json number,title,url,state,repository,author,updatedAt --limit 100');
+    const prs = JSON.parse(stdout);
+    
+    // Transform to match expected format
+    return prs.map(pr => {
+      // repository field from search is already in correct format
+      const repo = pr.repository?.nameWithOwner || '';
+      
+      return {
+        ...pr,
+        number: pr.number,
+        title: pr.title,
+        url: pr.url,
+        state: pr.state?.toUpperCase() || 'OPEN',
+        repo,
+        author: pr.author,
+        updatedAt: pr.updatedAt,
+        repository: pr.repository
+      };
+    });
   } catch (error) {
     console.error('Error fetching with gh:', error.message);
     throw error;
