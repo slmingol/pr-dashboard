@@ -72,38 +72,38 @@ h1 {
 /* Stats Bar */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .stat-item {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 1rem;
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.75rem;
   text-align: center;
   transition: all 0.2s;
 }
 
 .stat-item:hover {
   background: var(--surface-hover);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .stat-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   font-weight: 500;
 }
 
 .stat-value {
   display: block;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text);
 }
