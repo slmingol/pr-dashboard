@@ -42,7 +42,25 @@ async function loadPRsFromGhReport() {
           state,
           author: { login: author },
           updatedAt: new Date().toISOString(),
-    allback: try to run ghreport command directly if file doesn't exist
+          repository: { nameWithOwner: repoFullName },
+          metadata: {
+            age: age.trim(),
+            reviewDecision: reviewDecision.trim(),
+            mergeable: mergeable?.trim() || ''
+          }
+        };
+      }
+      return null;
+    }).filter(Boolean);
+    
+    return prs;
+  } catch (error) {
+    console.error('Error reading ghreport:', error.message);
+    return [];
+  }
+}
+
+// Fallback: try to run ghreport command directly if file doesn't exist
 async function runGhReportCommand() {
   try {
     const { stdout } = await execAsync('ghreport');
@@ -86,24 +104,6 @@ async function runGhReportCommand() {
     return prs;
   } catch (error) {
     console.error('Error running ghreport command:', error.message);
-          prs.push({
-            number: parseInt(number),
-            title: title.trim(),
-            url: `https://github.com/${repo}/pull/${number}`,
-            state: 'OPEN',
-            repo,
-            repository: { nameWithOwner: repo },
-            author: { login: 'unknown' },
-            updatedAt: new Date().toISOString()
-          });
-        }
-      }
-    }
-    
-    return prs;
-  } catch (error) {
-    console.error('Error fetching with gh:', error.message);
-    // Return empty array instead of throwing - allows dashboard to work with just ghreport
     return [];
   }
 }
@@ -111,20 +111,20 @@ async function runGhReportCommand() {
 // API Endpoints
 app.get('/api/prs', async (req, res) => {
   try {
-    // Try ghreport first, fallback to gh CLI
+    // Try ghreport file first, then try running ghreport command
     let prs = await loadPRsFromGhReport();
     
     if (prs.length === 0) {
-      prs = await fetchPRsWithGh();
+      prs = await runGhReportCommand();
     }
     
     res.json({ success: true, prs });
   } catch (error) {
-    res.status(500).jsle first, then try running ghreport command
-    let prs = await loadPRsFromGhReport();
-    
-    if (prs.length === 0) {
-      prs = await runGhReportCommandumber', async (req, res) => {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/pr/:owner/:repo/:number', async (req, res) => {
   try {
     const { owner, repo, number } = req.params;
     const { stdout } = await execAsync(
