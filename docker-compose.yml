@@ -29,6 +29,10 @@ services:
       # GitHub token for gh CLI (required since container can't access macOS keychain)
       # Get token: gh auth token
       - GH_TOKEN=${GH_TOKEN:-}
+      # ghreport requires GITHUB_TOKEN (same value as GH_TOKEN)
+      - GITHUB_TOKEN=${GH_TOKEN:-}
+      # List of repositories for ghreport to monitor (space-separated)
+      - subscribedRepos=${subscribedRepos:-}
     restart: unless-stopped
     networks:
       - pr-dashboard-net
