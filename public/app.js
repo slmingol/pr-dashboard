@@ -193,6 +193,19 @@ function renderPRs(prs) {
       const reviewDecision = metadata.reviewDecision || '';
       const mergeable = metadata.mergeable || '';
       
+      // Format review status
+      const reviewStatus = pr.reviewStatus || {};
+      let reviewBadge = '';
+      if (reviewStatus.hasReviewed) {
+        if (reviewStatus.state === 'APPROVED') {
+          reviewBadge = '<span class="state-badge state-success" title="You approved this PR">✓ Reviewed</span>';
+        } else if (reviewStatus.state === 'CHANGES_REQUESTED') {
+          reviewBadge = '<span class="state-badge state-warning" title="You requested changes">⚠️ Changes Requested</span>';
+        } else if (reviewStatus.state === 'COMMENTED') {
+          reviewBadge = '<span class="state-badge state-info" title="You commented">💬 Commented</span>';
+        }
+      }
+      
       html += `
         <div class="pr-card ${isHidden ? 'hidden' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
@@ -206,6 +219,7 @@ function renderPRs(prs) {
                 ${mergeable ? `• ${mergeable}` : ''}
               </span>
               <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
+              ${reviewBadge}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
@@ -284,6 +298,10 @@ async function viewDiff(owner, repo, number) {
       showModal(`
         <h2>Diff for ${owner}/${repo} #${number}</h2>
         <div class="diff-container">${diffHtml}</div>
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')">✓ Approve</button>
+          <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')">✗ Request Changes</button>
+        </div>
       `);
     } else {
       const errorMsg = data.error || 'Unknown error';
@@ -374,6 +392,59 @@ function reviewPR(owner, repo, number, action) {
   .catch(err => showToast('Error: ' + err.message, 'error'));
 }
 
+// Approve PR from diff view
+async function approvePRFromDiff(owner, repo, number) {
+  const comment = prompt(`Approve ${owner}/${repo} #${number}\n\nOptional comment:`);
+  if (comment === null) return; // User cancelled
+  
+  try {
+    const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'approve', body: comment || undefined })
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
+      hideModal();
+      fetchPRs(); // Refresh
+    } else {
+      showToast('Failed to approve: ' + data.error, 'error');
+    }
+  } catch (error) {
+    showToast('Error: ' + error.message, 'error');
+  }
+}
+
+// Request changes from diff view
+async function requestChangesFromDiff(owner, repo, number) {
+  const comment = prompt(`Request changes for ${owner}/${repo} #${number}\n\nComment (required):`);
+  if (!comment) {
+    showToast('Comment required when requesting changes', 'warning');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'request-changes', body: comment })
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
+      hideModal();
+      fetchPRs(); // Refresh
+    } else {
+      showToast('Failed to request changes: ' + data.error, 'error');
+    }
+  } catch (error) {
+    showToast('Error: ' + error.message, 'error');
+  }
+}
+
 // Modal functions
 function showModal(content) {
   const modal = document.getElementById('modal');
@@ -407,7 +478,38 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Theme toggle functionality
+function toggleTheme() {
+  const root = document.documentElement;
+  const themeToggle = document.getElementById('theme-toggle');
+  const isLight = root.classList.contains('light-mode');
+  
+  if (isLight) {
+    root.classList.remove('light-mode');
+    themeToggle.textContent = '🌙';
+    localStorage.setItem('theme', 'dark');
+  } else {
+    root.classList.add('light-mode');
+    themeToggle.textContent = '☀️';
+    localStorage.setItem('theme', 'light');
+  }
+}
+
+// Load saved theme
+function loadTheme() {
+  const savedTheme = localStorage.getItem('theme');
+  const themeToggle = document.getElementById('theme-toggle');
+  
+  if (savedTheme === 'light') {
+    document.documentElement.classList.add('light-mode');
+    themeToggle.textContent = '☀️';
+  } else {
+    themeToggle.textContent = '🌙';
+  }
+}
+
 // Event listeners
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
@@ -419,5 +521,6 @@ document.getElementById('modal').addEventListener('click', (e) => {
 });
 
 // Initial load
+loadTheme();
 loadHiddenPRs();
 fetchPRs();

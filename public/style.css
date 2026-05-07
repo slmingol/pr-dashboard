@@ -18,6 +18,20 @@
   --border: #334155;
 }
 
+:root.light-mode {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #ea580c;
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --surface-hover: #f8fafc;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   background: var(--bg);
@@ -38,6 +52,12 @@ header {
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid var(--border);
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 h1 {
@@ -335,6 +355,21 @@ h1 {
 
 .state-muted {
   background: var(--text-muted);
+  color: white;
+}
+
+.state-success {
+  background: var(--success);
+  color: white;
+}
+
+.state-warning {
+  background: var(--warning);
+  color: white;
+}
+
+.state-info {
+  background: var(--primary);
   color: white;
 }
 

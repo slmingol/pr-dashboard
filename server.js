@@ -108,7 +108,57 @@ async function runGhReportCommand() {
   }
 }
 
+// Get current authenticated user
+async function getCurrentUser() {
+  try {
+    const { stdout } = await execAsync('gh api user --jq .login');
+    return stdout.trim();
+  } catch (error) {
+    console.error('Error getting current user:', error.message);
+    return null;
+  }
+}
+
+// Check if current user has reviewed a PR
+async function checkUserReview(owner, repo, number, username) {
+  try {
+    const { stdout } = await execAsync(
+      `gh pr view ${number} --repo ${owner}/${repo} --json reviews`
+    );
+    const data = JSON.parse(stdout);
+    
+    if (data.reviews && data.reviews.length > 0) {
+      // Find the most recent review by this user
+      const userReviews = data.reviews
+        .filter(r => r.author.login === username)
+        .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+      
+      if (userReviews.length > 0) {
+        return {
+          hasReviewed: true,
+          state: userReviews[0].state, // APPROVED, CHANGES_REQUESTED, COMMENTED
+          submittedAt: userReviews[0].submittedAt
+        };
+      }
+    }
+    
+    return { hasReviewed: false };
+  } catch (error) {
+    console.error(`Error checking review for PR ${number}:`, error.message);
+    return { hasReviewed: false };
+  }
+}
+
 // API Endpoints
+app.get('/api/user', async (req, res) => {
+  try {
+    const username = await getCurrentUser();
+    res.json({ success: true, username });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/prs', async (req, res) => {
   try {
     // Try ghreport file first, then try running ghreport command
@@ -118,7 +168,20 @@ app.get('/api/prs', async (req, res) => {
       prs = await runGhReportCommand();
     }
     
-    res.json({ success: true, prs });
+    // Get current user and check reviews
+    const currentUser = await getCurrentUser();
+    if (currentUser) {
+      // Check reviews in parallel for better performance
+      const reviewPromises = prs.map(async (pr) => {
+        const [owner, repo] = pr.repo.split('/');
+        const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
+        return { ...pr, reviewStatus };
+      });
+      
+      prs = await Promise.all(reviewPromises);
+    }
+    
+    res.json({ success: true, prs, currentUser });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
