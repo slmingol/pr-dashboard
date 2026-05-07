@@ -634,6 +634,21 @@ document.getElementById('comment-input').addEventListener('keydown', (e) => {
   }
 });
 
+// Global keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('modal');
+    const commentModal = document.getElementById('comment-modal');
+    
+    // Close modals in priority order (comment modal first if open)
+    if (!commentModal.classList.contains('hidden')) {
+      cancelCommentModal();
+    } else if (!modal.classList.contains('hidden')) {
+      hideModal();
+    }
+  }
+});
+
 // Initial load
 loadTheme();
 loadHiddenPRs();
