@@ -313,6 +313,7 @@ async function viewDiff(owner, repo, number) {
         <div class="diff-container">${diffHtml}</div>
         <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
           <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')">✓ Approve</button>
+          <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')">✓ Approve + Comment</button>
           <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')">✗ Request Changes</button>
         </div>
       `);
@@ -461,6 +462,55 @@ async function approvePRFromDiff(owner, repo, number) {
     }
   } catch (error) {
     console.error('Review error:', error);
+    showToast('Error: ' + error.message, 'error');
+  }
+}
+
+// Approve PR from diff view with comment
+async function approvePRFromDiffWithComment(owner, repo, number) {
+  console.log(`Starting approval with comment for ${owner}/${repo}#${number}`);
+  
+  const comment = await showCommentModal(
+    `Approve ${owner}/${repo} #${number}`,
+    'Optional comment',
+    false
+  );
+  
+  if (comment === null) {
+    console.log('User cancelled approval');
+    hideCommentModal();
+    return; // User cancelled
+  }
+  
+  console.log(`Comment provided: "${comment}"`);
+  
+  try {
+    const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'approve', body: comment || undefined })
+    });
+    const data = await response.json();
+    
+    console.log('Review response:', data);
+    
+    if (data.success) {
+      console.log('Closing modals');
+      hideCommentModal(); // Close comment modal
+      hideModal(); // Close diff modal
+      // Small delay to ensure modals are fully closed before showing toast
+      setTimeout(() => {
+        showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
+        fetchPRs(); // Refresh
+      }, 50);
+    } else {
+      console.error('Review failed:', data.error);
+      hideCommentModal();
+      showToast('Failed to approve: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Review error:', error);
+    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
