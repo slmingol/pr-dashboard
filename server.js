@@ -20,7 +20,7 @@ async function loadPRsFromGhReport() {
     // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
     const lines = content.split('\n').filter(line => line.trim());
     const prs = lines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+([^r]+)\s*reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.+)?/);
+      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
       if (match) {
         const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
         const repoFullName = `${owner}/${repo}`;
@@ -68,7 +68,7 @@ async function runGhReportCommand() {
     // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
     const lines = stdout.split('\n').filter(line => line.trim());
     const prs = lines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+([^r]+)\s*reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.+)?/);
+      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
       if (match) {
         const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
         const repoFullName = `${owner}/${repo}`;
