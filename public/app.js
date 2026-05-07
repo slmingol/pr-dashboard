@@ -437,48 +437,30 @@ async function reviewPR(owner, repo, number, action) {
 async function approvePRFromDiff(owner, repo, number) {
   console.log(`Starting approval for ${owner}/${repo}#${number}`);
   
-  const comment = await showCommentModal(
-    `Approve ${owner}/${repo} #${number}`,
-    'Optional comment',
-    false
-  );
-  
-  if (comment === null) {
-    console.log('User cancelled approval');
-    hideCommentModal();
-    return; // User cancelled
-  }
-  
-  console.log(`Comment provided: "${comment}"`);
-  
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'approve', body: comment || undefined })
+      body: JSON.stringify({ action: 'approve' })
     });
     const data = await response.json();
     
     console.log('Review response:', data);
     
     if (data.success) {
-      console.log('Closing modals');
-      // Close modals first, then show feedback
-      hideCommentModal(); // Close comment modal
+      console.log('Closing modal');
       hideModal(); // Close diff modal
-      // Small delay to ensure modals are fully closed before showing toast
+      // Small delay to ensure modal is fully closed before showing toast
       setTimeout(() => {
         showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
         fetchPRs(); // Refresh
       }, 50);
     } else {
       console.error('Review failed:', data.error);
-      hideCommentModal();
       showToast('Failed to approve: ' + data.error, 'error');
     }
   } catch (error) {
     console.error('Review error:', error);
-    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
 }
