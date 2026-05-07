@@ -442,8 +442,11 @@ async function approvePRFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
-      hideCommentModal(); // Close comment modal
-      hideModal(); // Close diff modal
+      // Close modals with slight delay to ensure proper DOM update
+      setTimeout(() => {
+        hideCommentModal(); // Close comment modal
+        hideModal(); // Close diff modal
+      }, 10);
       showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
       fetchPRs(); // Refresh
     } else {
@@ -478,8 +481,11 @@ async function requestChangesFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
-      hideCommentModal(); // Close comment modal
-      hideModal(); // Close diff modal
+      // Close modals with slight delay to ensure proper DOM update
+      setTimeout(() => {
+        hideCommentModal(); // Close comment modal
+        hideModal(); // Close diff modal
+      }, 10);
       showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
       fetchPRs(); // Refresh
     } else {
