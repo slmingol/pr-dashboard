@@ -236,16 +236,16 @@ function renderPRs(prs, showHidden = false) {
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
-              <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repoName}', '${number}')">
+              <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repoName}', '${number}')" title="${isHidden ? 'Unhide this PR from the list' : 'Hide this PR from the list'}">
                 ${isHidden ? '👁' : '🙈'}
               </button>
-              <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')">Details</button>
-              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')">Diff</button>
-              <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')">Checkout</button>
-              <button class="btn btn-small btn-warning" onclick="addComment('${owner}', '${repoName}', '${number}')">Comment</button>
-              <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'approve')">✓</button>
-              <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'request-changes')">✗</button>
-              <a href="${pr.url}" target="_blank" class="btn btn-small btn-muted">Open →</a>
+              <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')" title="View PR description and details">Details</button>
+              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')" title="View code changes and review">Diff</button>
+              <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')" title="Checkout this PR branch locally">Checkout</button>
+              <button class="btn btn-small btn-warning" onclick="addComment('${owner}', '${repoName}', '${number}')" title="Add a comment to this PR">Comment</button>
+              <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'approve')" title="Approve this PR">✓</button>
+              <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'request-changes')" title="Request changes on this PR">✗</button>
+              <a href="${pr.url}" target="_blank" class="btn btn-small btn-muted" title="Open PR in GitHub">Open →</a>
             </div>
           </div>
         </div>
@@ -312,9 +312,9 @@ async function viewDiff(owner, repo, number) {
         <h2>Diff for ${owner}/${repo} #${number}</h2>
         <div class="diff-container">${diffHtml}</div>
         <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')">✓ Approve</button>
-          <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')">✓ Approve + Comment</button>
-          <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')">✗ Request Changes</button>
+          <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">✓ Approve</button>
+          <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">✓ Approve + Comment</button>
+          <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">✗ Request Changes</button>
         </div>
       `);
     } else {
