@@ -74,6 +74,11 @@ h1 {
   color: white;
 }
 
+.btn-muted {
+  background: var(--text-muted);
+  color: white;
+}
+
 .btn-small {
   padding: 0.375rem 0.75rem;
   font-size: 0.8rem;
@@ -83,6 +88,7 @@ h1 {
   display: flex;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  align-items: center;
 }
 
 #search {
@@ -102,6 +108,22 @@ h1 {
   border-radius: 0.375rem;
   color: var(--text);
   font-size: 0.875rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
 }
 
 .loading, .error {
@@ -129,6 +151,11 @@ h1 {
   border-radius: 0.5rem;
   padding: 1.25rem;
   transition: all 0.2s;
+}
+
+.pr-card.hidden {
+  opacity: 0.5;
+  border-color: var(--text-muted);
 }
 
 .pr-card:hover {
@@ -191,6 +218,11 @@ h1 {
 
 .state-review_required {
   background: var(--warning);
+  color: white;
+}
+
+.state-muted {
+  background: var(--text-muted);
   color: white;
 }
 

@@ -1,5 +1,42 @@
 let allPRs = [];
 let filteredPRs = [];
+let hiddenPRs = new Set();
+
+// Load hidden PRs from localStorage
+function loadHiddenPRs() {
+  const stored = localStorage.getItem('hiddenPRs');
+  if (stored) {
+    hiddenPRs = new Set(JSON.parse(stored));
+  }
+  updateHiddenCount();
+}
+
+// Save hidden PRs to localStorage
+function saveHiddenPRs() {
+  localStorage.setItem('hiddenPRs', JSON.stringify([...hiddenPRs]));
+  updateHiddenCount();
+}
+
+// Toggle PR hidden state
+function toggleHidePR(prId, owner, repo, number) {
+  if (hiddenPRs.has(prId)) {
+    hiddenPRs.delete(prId);
+    showToast(`Unhidden PR #${number}`, 'info', '', 2000);
+  } else {
+    hiddenPRs.add(prId);
+    showToast(`Hidden PR #${number}`, 'success', '', 2000);
+  }
+  saveHiddenPRs();
+  filterAndRenderPRs();
+}
+
+// Update hidden count badge
+function updateHiddenCount() {
+  const count = document.getElementById('hidden-count');
+  if (count) {
+    count.textContent = hiddenPRs.size;
+  }
+}
 
 // Toast notification system
 function showToast(message, type = 'info', title = '', duration = 5000) {
@@ -71,6 +108,7 @@ async function fetchPRs() {
 function filterAndRenderPRs() {
   const searchTerm = document.getElementById('search').value.toLowerCase();
   const stateFilter = document.getElementById('state-filter').value;
+  const showHidden = document.getElementById('show-hidden').checked;
   
   filteredPRs = allPRs.filter(pr => {
     const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) || 
@@ -79,7 +117,11 @@ function filterAndRenderPRs() {
     
     const matchesState = stateFilter === 'all' || pr.state === stateFilter;
     
-    return matchesSearch && matchesState;
+    const prId = `${pr.repo}#${pr.number}`;
+    const isHidden = hiddenPRs.has(prId);
+    const matchesHidden = showHidden || !isHidden;
+    
+    return matchesSearch && matchesState && matchesHidden;
   });
   
   renderPRs(filteredPRs);
@@ -98,6 +140,8 @@ function renderPRs(prs) {
     const [owner, repo] = (pr.repository?.nameWithOwner || pr.repo || '').split('/');
     const number = pr.number;
     const state = pr.state || 'OPEN';
+    const prId = `${pr.repo}#${number}`;
+    const isHidden = hiddenPRs.has(prId);
     
     // Format metadata if available
     const metadata = pr.metadata || {};
@@ -108,7 +152,7 @@ function renderPRs(prs) {
     ` : '';
     
     return `
-      <div class="pr-card" data-owner="${owner}" data-repo="${repo}" data-number="${number}">
+      <div class="pr-card ${isHidden ? 'hidden' : ''}" data-owner="${owner}" data-repo="${repo}" data-number="${number}">
         <div class="pr-header">
           <div>
             <h3 class="pr-title">${pr.title || 'Untitled PR'}</h3>
@@ -118,10 +162,14 @@ function renderPRs(prs) {
               ${pr.author?.login ? `<span>👤 ${pr.author.login}</span>` : ''}
               ${metadataHtml}
               <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
+              ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
           </div>
         </div>
         <div class="pr-actions">
+          <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repo}', '${number}')">
+            ${isHidden ? '👁 Unhide' : '🙈 Hide'}
+          </button>
           <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repo}', '${number}')">
             View Details
           </button>
@@ -326,6 +374,7 @@ function escapeHtml(text) {
 document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
+document.getElementById('show-hidden').addEventListener('change', filterAndRenderPRs);
 
 document.querySelector('.close').addEventListener('click', hideModal);
 document.getElementById('modal').addEventListener('click', (e) => {
@@ -333,4 +382,5 @@ document.getElementById('modal').addEventListener('click', (e) => {
 });
 
 // Initial load
+loadHiddenPRs();
 fetchPRs();
