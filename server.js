@@ -45,26 +45,45 @@ async function loadPRsFromGhReport() {
 // Fetch PRs using gh CLI directly (searches across all repos)
 async function fetchPRsWithGh() {
   try {
-    // Use gh search to find PRs across all repositories involving the user
-    // Search for open PRs, can be modified to include closed: involves:@me state:open OR state:closed
-    const { stdout } = await execAsync('gh search prs --involves=@me --state=open --json number,title,url,state,repository,author,updatedAt --limit 100');
-    const prs = JSON.parse(stdout);
+    // Use gh pr status to get PRs across all repos (created by, assigned, review requested, or mentioned)
+    const { stdout } = await execAsync('gh pr status --json createdBy,needsReview,reviewRequests');
+    const status = JSON.parse(stdout);
+    
+    // Combine all PR categories
+    const allPRs = [
+      ...(status.createdBy || []),
+      ...(status.needsReview || []),
+      ...(status.reviewRequests || [])
+    ];
+    
+    // Deduplicate by URL
+    const seen = new Set();
+    const uniquePRs = allPRs.filter(pr => {
+      if (seen.has(pr.url)) return false;
+      seen.add(pr.url);
+      return true;
+    });
     
     // Transform to match expected format
-    return prs.map(pr => {
-      // repository field from search is already in correct format
-      const repo = pr.repository?.nameWithOwner || '';
+    return uniquePRs.map(pr => {
+      // Extract repo from URL (format: https://github.com/owner/repo/pull/123)
+      let repo = '';
+      if (pr.url) {
+        const match = pr.url.match(/github\.com\/([^\/]+\/[^\/]+)\/pull/);
+        if (match) {
+          repo = match[1];
+        }
+      }
       
       return {
-        ...pr,
         number: pr.number,
-        title: pr.title,
+        title: pr.title || pr.headRefName || 'Untitled',
         url: pr.url,
-        state: pr.state?.toUpperCase() || 'OPEN',
+        state: pr.state || pr.isDraft ? 'DRAFT' : 'OPEN',
         repo,
-        author: pr.author,
-        updatedAt: pr.updatedAt,
-        repository: pr.repository
+        repository: { nameWithOwner: repo },
+        author: pr.author || { login: 'unknown' },
+        updatedAt: pr.updatedAt || new Date().toISOString()
       };
     });
   } catch (error) {
