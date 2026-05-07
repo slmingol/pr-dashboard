@@ -1,6 +1,45 @@
 let allPRs = [];
 let filteredPRs = [];
 
+// Toast notification system
+function showToast(message, type = 'info', title = '', duration = 5000) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  
+  const icons = {
+    success: '✓',
+    error: '✗',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+  
+  const titles = {
+    success: title || 'Success',
+    error: title || 'Error',
+    warning: title || 'Warning',
+    info: title || 'Info'
+  };
+  
+  toast.innerHTML = `
+    <div class="toast-icon">${icons[type]}</div>
+    <div class="toast-content">
+      <div class="toast-title">${titles[type]}</div>
+      <div class="toast-message">${message}</div>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+}
+
 // Fetch PRs from API
 async function fetchPRs() {
   showLoading(true);
@@ -13,10 +52,15 @@ async function fetchPRs() {
     if (data.success) {
       allPRs = data.prs;
       filterAndRenderPRs();
+      if (data.prs.length > 0) {
+        showToast(`Loaded ${data.prs.length} pull requests`, 'success', '', 3000);
+      }
     } else {
+      showToast(data.error || 'Failed to fetch PRs', 'error');
       showError(data.error || 'Failed to fetch PRs');
     }
   } catch (error) {
+    showToast('Network error: ' + error.message, 'error');
     showError('Network error: ' + error.message);
   } finally {
     showLoading(false);
@@ -124,10 +168,10 @@ async function viewDetails(owner, repo, number) {
         </div>
       `);
     } else {
-      alert('Failed to fetch PR details: ' + data.error);
+      showToast('Failed to fetch PR details: ' + data.error, 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    showToast('Error: ' + error.message, 'error');
   }
 }
 
@@ -150,10 +194,10 @@ async function viewDiff(owner, repo, number) {
         <div class="diff-container">${diffHtml}</div>
       `);
     } else {
-      alert('Failed to fetch diff: ' + data.error);
+      showToast('Failed to fetch diff: ' + data.error, 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    showToast('Error: ' + error.message, 'error');
   }
 }
 
@@ -168,12 +212,15 @@ async function checkoutPR(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
-      alert('PR checked out successfully!\n\n' + data.output);
+      showToast('PR checked out successfully', 'success');
+      if (data.output) {
+        console.log('Checkout output:', data.output);
+      }
     } else {
-      alert('Failed to checkout PR: ' + data.error);
+      showToast('Failed to checkout PR: ' + data.error, 'error');
     }
   } catch (error) {
-    alert('Error: ' + error.message);
+    showToast('Error: ' + error.message, 'error');
   }
 }
 
@@ -190,12 +237,12 @@ function addComment(owner, repo, number) {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      alert('Comment added successfully!');
+      showToast('Comment added successfully', 'success');
     } else {
-      alert('Failed to add comment: ' + data.error);
+      showToast('Failed to add comment: ' + data.error, 'error');
     }
   })
-  .catch(err => alert('Error: ' + err.message));
+  .catch(err => showToast('Error: ' + err.message, 'error'));
 }
 
 // Review PR
@@ -212,13 +259,13 @@ function reviewPR(owner, repo, number, action) {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      alert('Review submitted successfully!');
+      showToast('Review submitted successfully', 'success');
       fetchPRs(); // Refresh
     } else {
-      alert('Failed to submit review: ' + data.error);
+      showToast('Failed to submit review: ' + data.error, 'error');
     }
   })
-  .catch(err => alert('Error: ' + err.message));
+  .catch(err => showToast('Error: ' + err.message, 'error'));
 }
 
 // Modal functions
