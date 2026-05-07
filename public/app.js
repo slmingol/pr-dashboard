@@ -427,8 +427,9 @@ async function approvePRFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
+      hideCommentModal(); // Ensure comment modal is closed
+      hideModal(); // Close diff modal
       showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
-      hideModal();
       fetchPRs(); // Refresh
     } else {
       showToast('Failed to approve: ' + data.error, 'error');
@@ -457,8 +458,9 @@ async function requestChangesFromDiff(owner, repo, number) {
     const data = await response.json();
     
     if (data.success) {
+      hideCommentModal(); // Ensure comment modal is closed
+      hideModal(); // Close diff modal
       showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
-      hideModal();
       fetchPRs(); // Refresh
     } else {
       showToast('Failed to request changes: ' + data.error, 'error');

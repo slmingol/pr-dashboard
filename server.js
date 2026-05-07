@@ -127,24 +127,30 @@ async function checkUserReview(owner, repo, number, username) {
     );
     const data = JSON.parse(stdout);
     
-    if (data.reviews && data.reviews.length > 0) {
+    if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
       // Find the most recent review by this user
       const userReviews = data.reviews
-        .filter(r => r.author.login === username)
+        .filter(r => r.author && r.author.login && r.author.login === username)
         .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
       
       if (userReviews.length > 0) {
+        const latestReview = userReviews[0];
+        console.log(`PR ${owner}/${repo}#${number}: User ${username} review state: ${latestReview.state}`);
         return {
           hasReviewed: true,
-          state: userReviews[0].state, // APPROVED, CHANGES_REQUESTED, COMMENTED
-          submittedAt: userReviews[0].submittedAt
+          state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
+          submittedAt: latestReview.submittedAt
         };
       }
     }
     
     return { hasReviewed: false };
   } catch (error) {
-    console.error(`Error checking review for PR ${number}:`, error.message);
+    // Silently fail for 404/403 errors (PR might be deleted or inaccessible)
+    if (error.message.includes('404') || error.message.includes('403') || error.message.includes('Not Found')) {
+      return { hasReviewed: false };
+    }
+    console.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
     return { hasReviewed: false };
   }
 }
@@ -170,12 +176,19 @@ app.get('/api/prs', async (req, res) => {
     
     // Get current user and check reviews
     const currentUser = await getCurrentUser();
+    console.log(`Current authenticated user: ${currentUser}`);
+    
     if (currentUser) {
-      // Check reviews in parallel for better performance
+      // Check reviews in parallel for better performance, but handle errors gracefully
       const reviewPromises = prs.map(async (pr) => {
-        const [owner, repo] = pr.repo.split('/');
-        const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
-        return { ...pr, reviewStatus };
+        try {
+          const [owner, repo] = pr.repo.split('/');
+          const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
+          return { ...pr, reviewStatus };
+        } catch (error) {
+          console.error(`Failed to check review for PR ${pr.repo}#${pr.number}:`, error.message);
+          return { ...pr, reviewStatus: { hasReviewed: false } };
+        }
       });
       
       prs = await Promise.all(reviewPromises);

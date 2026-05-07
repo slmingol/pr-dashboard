@@ -5,17 +5,21 @@
 }
 
 :root {
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #ea580c;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --warning: #f97316;
   --bg: #0f172a;
   --surface: #1e293b;
   --surface-hover: #334155;
-  --text: #e2e8f0;
-  --text-muted: #94a3b8;
-  --border: #334155;
+  --text: #f1f5f9;
+  --text-muted: #cbd5e1;
+  --border: #475569;
+  --muted-bg: #64748b;
+  --muted-hover: #475569;
 }
 
 :root.light-mode {
@@ -140,14 +144,26 @@ h1 {
   color: white;
 }
 
+.btn-success:hover {
+  background: var(--success-hover);
+}
+
 .btn-danger {
   background: var(--danger);
   color: white;
 }
 
+.btn-danger:hover {
+  background: var(--danger-hover);
+}
+
 .btn-muted {
-  background: var(--text-muted);
+  background: var(--muted-bg);
   color: white;
+}
+
+.btn-muted:hover {
+  background: var(--muted-hover);
 }
 
 .btn-small {
