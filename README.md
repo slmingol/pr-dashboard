@@ -27,19 +27,32 @@ A containerized pull request dashboard that integrates with your `ghreport` CLI 
 - Add comments and submit reviews
 - Approve or request changes with optional comments
 - Open PRs directly in GitHub
+- **Refresh Data**: Re-run ghreport to fetch latest PRs from all monitored repositories
+- **Clickable PR Numbers**: Direct links to GitHub PRs from PR numbers
 
 ### 🎨 UI/UX
 - **Dark/Light Mode**: Toggle between themes with 🌙/☀️ button (preference saved)
 - **Compact Layout**: Single-line horizontal PR cards for maximum density
 - **Toast Notifications**: Non-intrusive success/error messages
 - **Keyboard Shortcuts**: Cmd/Ctrl+Enter to submit, Escape to cancel
+- **Color-Coded Buttons**: Each action has a distinct color for easy identification
+  - 🔵 **Details** (Blue) - View PR information
+  - 🔷 **Diff** (Cyan) - Inspect code changes
+  - 🟢 **Checkout** (Green) - Check out branch
+  - 🟠 **Comment** (Orange) - Add comment
+  - ✅ **Approve** (Green) - Positive review
+  - ❌ **Reject** (Red) - Request changes
+- **Smart Title Display**: Hides redundant generic titles like "PR #123"
+- **Larger Buttons**: Improved hit targets and readability (13px font, 8px/14px padding)
 
 ## Prerequisites
 
 - **Podman Desktop** or **Docker** installed
-- **GitHub CLI** (`gh`) installed and authenticated
-- **ghreport** CLI tool configured
+- **GitHub CLI** (`gh`) installed and authenticated on host
 - GitHub personal access token (for container authentication)
+- **subscribedRepos** environment variable (optional, for monitoring specific repositories)
+
+**Note**: `ghreport` is automatically installed inside the container during build - no host installation required.
 
 ## Setup
 
@@ -51,7 +64,13 @@ Create a `.env` file with your GitHub token:
 echo "GH_TOKEN=$(gh auth token)" > .env
 ```
 
-**Important**: The container cannot access macOS keychain, so the token must be provided via environment variable.
+**Optional**: Add subscribedRepos for monitoring specific repositories:
+
+```bash
+echo 'subscribedRepos=org/repo1 org/repo2 org/repo3' >> .env
+```
+
+**Important**: The container cannot access macOS keychain, so the token must be provided via environment variable. Both `GH_TOKEN` (for gh CLI) and `GITHUB_TOKEN` (for ghreport) are automatically set from the same token value.
 
 ### 2. Configure ghreport Output Path
 
@@ -103,11 +122,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - **State Filter**: Show all PRs, or only Open/Closed/Merged
 - **Show Hidden**: Toggle to show/hide PRs you've marked as hidden
 - **Theme Toggle**: 🌙/☀️ button to switch between dark and light mode
+- **Refresh Data**: 🔄 button to re-run ghreport and fetch latest PRs (takes 20-30 seconds for 100+ repos)
+- **Reload**: ↻ button to reload PR list from existing ghreport.txt file (instant)
 
 ### PR Actions
 
 Each PR card shows:
-- **PR Number & Title**: With truncation for long titles
+- **PR Number**: Clickable link to GitHub PR (bold, primary color)
+- **Title**: Shown only if not generic (e.g., not "PR #123")
 - **Metadata**: Author, age, review status, mergeable status
 - **State Badge**: Current PR state (OPEN, APPROVED, REVIEW REQUIRED)
 - **Review Badge**: Your review status (✓ Reviewed, ⚠️ Changes Requested, 💬 Commented)
@@ -146,7 +168,9 @@ Each PR card shows:
 
 Set in `.env` file or `docker-compose.yml`:
 
-- `GH_TOKEN` - **Required**: GitHub personal access token
+- `GH_TOKEN` - **Required**: GitHub personal access token (for gh CLI)
+- `GITHUB_TOKEN` - **Auto-set**: Same as GH_TOKEN (for ghreport authentication)
+- `subscribedRepos` - **Optional**: Space-separated list of repos to monitor (e.g., "org/repo1 org/repo2")
 - `NODE_ENV` - Node environment (default: `production`)
 - `PORT` - Server port (default: `3000`)
 - `GHREPORT_OUTPUT` - Path to ghreport file inside container (default: `/data/ghreport.txt`)
@@ -170,7 +194,8 @@ If your ghreport format differs, edit the `loadPRsFromGhReport()` function in `s
 
 ### Container Stack
 - **Base Image**: `node:18-alpine`
-- **Additional Tools**: `github-cli`, `git`
+- **Additional Tools**: `github-cli`, `git`, `go` (for ghreport build)
+- **ghreport**: Automatically installed via `go install github.com/jmainguy/ghreport@latest`
 - **Port**: 3000
 - **Health Check**: Automatic monitoring with 30s interval
 
@@ -228,6 +253,7 @@ Open http://localhost:3000
 - `POST /api/pr/:owner/:repo/:number/checkout` - Checkout PR locally
 - `POST /api/pr/:owner/:repo/:number/comment` - Add comment
 - `POST /api/pr/:owner/:repo/:number/review` - Submit review (approve/request-changes)
+- `POST /api/refresh-ghreport` - Re-run ghreport command to fetch latest PRs from GitHub
 
 ## Troubleshooting
 
