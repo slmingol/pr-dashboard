@@ -604,11 +604,13 @@ function escapeHtml(text) {
 // Refresh ghreport data
 async function refreshGhReport() {
   const btn = document.getElementById('refresh-ghreport-btn');
+  const progressContainer = document.getElementById('refresh-progress');
   const originalText = btn.textContent;
   
   try {
     btn.disabled = true;
-    btn.textContent = '🔄 Running...';
+    btn.textContent = '⏳ Running...';
+    progressContainer.classList.remove('hidden');
     
     const response = await fetch('/api/refresh-ghreport', {
       method: 'POST'
@@ -625,6 +627,7 @@ async function refreshGhReport() {
   } catch (error) {
     showToast(`Error refreshing data: ${error.message}`, 'error', 'Network Error');
   } finally {
+    progressContainer.classList.add('hidden');
     btn.disabled = false;
     btn.textContent = originalText;
   }
