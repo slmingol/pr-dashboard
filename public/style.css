@@ -287,6 +287,10 @@ h1 {
   border-color: var(--text-muted);
 }
 
+.pr-card.pr-hidden-dimmed {
+  opacity: 0.5;
+}
+
 .pr-card:hover {
   background: var(--surface-hover);
   transform: translateY(-1px);

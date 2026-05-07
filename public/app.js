@@ -138,12 +138,12 @@ function filterAndRenderPRs() {
     return matchesSearch && matchesState && matchesHidden;
   });
   
-  renderPRs(filteredPRs);
+  renderPRs(filteredPRs, showHidden);
   updateStats();
 }
 
 // Render PR list
-function renderPRs(prs) {
+function renderPRs(prs, showHidden = false) {
   const prList = document.getElementById('pr-list');
   
   if (prs.length === 0) {
@@ -207,7 +207,7 @@ function renderPRs(prs) {
       }
       
       html += `
-        <div class="pr-card ${isHidden ? 'hidden' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
+        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
             <div class="pr-info">
               <span class="pr-number">#${number}</span>
