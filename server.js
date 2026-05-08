@@ -17,9 +17,30 @@ async function loadPRsFromGhReport() {
     const ghreportPath = process.env.GHREPORT_OUTPUT || '/data/ghreport.txt';
     const content = await fs.readFile(ghreportPath, 'utf-8');
     
+    // Handle line continuations (lines starting with space are continuations)
+    const rawLines = content.split('\n');
+    const joinedLines = [];
+    let currentLine = '';
+    
+    for (const line of rawLines) {
+      if (line.startsWith(' ') && currentLine) {
+        // Continuation line - append to current
+        currentLine += line;
+      } else {
+        // New line - save previous and start new
+        if (currentLine.trim()) {
+          joinedLines.push(currentLine.trim());
+        }
+        currentLine = line;
+      }
+    }
+    // Don't forget the last line
+    if (currentLine.trim()) {
+      joinedLines.push(currentLine.trim());
+    }
+    
     // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
-    const lines = content.split('\n').filter(line => line.trim());
-    const prs = lines.map((line) => {
+    const prs = joinedLines.map((line) => {
       const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
       if (match) {
         const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
@@ -65,9 +86,27 @@ async function runGhReportCommand() {
   try {
     const { stdout } = await execAsync('ghreport');
     
+    // Handle line continuations (lines starting with space are continuations)
+    const rawLines = stdout.split('\n');
+    const joinedLines = [];
+    let currentLine = '';
+    
+    for (const line of rawLines) {
+      if (line.startsWith(' ') && currentLine) {
+        currentLine += line;
+      } else {
+        if (currentLine.trim()) {
+          joinedLines.push(currentLine.trim());
+        }
+        currentLine = line;
+      }
+    }
+    if (currentLine.trim()) {
+      joinedLines.push(currentLine.trim());
+    }
+    
     // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
-    const lines = stdout.split('\n').filter(line => line.trim());
-    const prs = lines.map((line) => {
+    const prs = joinedLines.map((line) => {
       const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
       if (match) {
         const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
