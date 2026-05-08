@@ -110,6 +110,17 @@ async function fetchPRs() {
     
     if (data.success) {
       allPRs = data.prs;
+      
+      // Clean up hiddenPRs - remove any PRs that no longer exist
+      const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
+      const cleanedHiddenPRs = new Set([...hiddenPRs].filter(prId => currentPRIds.has(prId)));
+      
+      // Update hiddenPRs if we removed stale entries
+      if (cleanedHiddenPRs.size !== hiddenPRs.size) {
+        hiddenPRs = cleanedHiddenPRs;
+        localStorage.setItem('hiddenPRs', JSON.stringify([...hiddenPRs]));
+      }
+      
       updateStats();
       filterAndRenderPRs();
       if (data.prs.length > 0) {
