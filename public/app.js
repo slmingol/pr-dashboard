@@ -1,6 +1,7 @@
 let allPRs = [];
 let filteredPRs = [];
 let hiddenPRs = new Set();
+let previousPRIds = new Set(); // Track PRs from last refresh to highlight new ones
 
 // Load hidden PRs from localStorage
 function loadHiddenPRs() {
@@ -111,8 +112,25 @@ async function fetchPRs() {
     if (data.success) {
       allPRs = data.prs;
       
-      // Clean up hiddenPRs - remove any PRs that no longer exist
+      // Detect new PRs since last refresh
       const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
+      
+      // Mark new PRs (PRs that weren't in the previous set)
+      let newPRCount = 0;
+      allPRs.forEach(pr => {
+        const prId = `${pr.repo}#${pr.number}`;
+        if (previousPRIds.size > 0 && !previousPRIds.has(prId)) {
+          pr.isNew = true;
+          newPRCount++;
+        } else {
+          pr.isNew = false;
+        }
+      });
+      
+      // Update previousPRIds for next comparison
+      previousPRIds = currentPRIds;
+      
+      // Clean up hiddenPRs - remove any PRs that no longer exist
       const cleanedHiddenPRs = new Set([...hiddenPRs].filter(prId => currentPRIds.has(prId)));
       
       // Update hiddenPRs if we removed stale entries
@@ -124,7 +142,10 @@ async function fetchPRs() {
       updateStats();
       filterAndRenderPRs();
       if (data.prs.length > 0) {
-        showToast(`Loaded ${data.prs.length} pull requests`, 'success', '', 3000);
+        const message = newPRCount > 0 
+          ? `Loaded ${data.prs.length} pull requests (${newPRCount} new)` 
+          : `Loaded ${data.prs.length} pull requests`;
+        showToast(message, 'success', '', 3000);
       }
     } else {
       showToast(data.error || 'Failed to fetch PRs', 'error');
@@ -231,7 +252,7 @@ function renderPRs(prs, showHidden = false) {
       const hasRealTitle = pr.title && pr.title !== genericTitle && pr.title !== 'Untitled PR';
       
       html += `
-        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
+        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
             <div class="pr-info">
               <a href="${pr.url}" target="_blank" class="pr-number" title="Open PR in GitHub">#${number}</a>
@@ -244,6 +265,7 @@ function renderPRs(prs, showHidden = false) {
               </span>
               <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
               ${reviewBadge}
+              ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
