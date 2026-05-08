@@ -17,41 +17,60 @@ async function loadPRsFromGhReport() {
     const ghreportPath = process.env.GHREPORT_OUTPUT || '/data/ghreport.txt';
     const content = await fs.readFile(ghreportPath, 'utf-8');
     
-    // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
-    const lines = content.split('\n').filter(line => line.trim());
-    const prs = lines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
-      if (match) {
-        const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
-        const repoFullName = `${owner}/${repo}`;
-        
-        // Map review decision emoji to state
-        let state = 'OPEN';
-        if (reviewDecision.includes('✅')) {
-          state = 'APPROVED';
-        } else if (reviewDecision.includes('🔍')) {
-          state = 'REVIEW_REQUIRED';
-        }
-        
-        return {
-          id: `${repoFullName}#${number}`,
-          repo: repoFullName,
-          number: parseInt(number),
-          title: `PR #${number}`, // ghreport doesn't include title, we'll fetch it if needed
-          url: `https://github.com/${repoFullName}/pull/${number}`,
-          state,
-          author: { login: author },
-          updatedAt: new Date().toISOString(),
-          repository: { nameWithOwner: repoFullName },
-          metadata: {
-            age: age.trim(),
-            reviewDecision: reviewDecision.trim(),
-            mergeable: mergeable?.trim() || ''
-          }
-        };
+    const lines = content.split('\n');
+    const prs = [];
+    
+    // New multi-line format:
+    // https://github.com/owner/repo/pull/123
+    //   author: username
+    //   Age: X days
+    //   reviewDecision: emoji
+    //   mergeable emoji
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line.startsWith('https://github.com/')) continue;
+      
+      const urlMatch = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+      if (!urlMatch) continue;
+      
+      const [, owner, repo, number] = urlMatch;
+      const repoFullName = `${owner}/${repo}`;
+      
+      // Read next 4 lines for metadata
+      const author = (lines[i + 1] || '').replace(/^\s*author:\s*/, '').trim();
+      const age = (lines[i + 2] || '').replace(/^\s*Age:\s*/, '').trim();
+      const reviewDecision = (lines[i + 3] || '').replace(/^\s*reviewDecision:\s*/, '').trim();
+      const mergeable = (lines[i + 4] || '').replace(/^\s*mergeable\s*/, '').trim();
+      
+      // Map review decision emoji to state
+      let state = 'OPEN';
+      if (reviewDecision.includes('✅')) {
+        state = 'APPROVED';
+      } else if (reviewDecision.includes('🔍')) {
+        state = 'REVIEW_REQUIRED';
       }
-      return null;
-    }).filter(Boolean);
+      
+      prs.push({
+        id: `${repoFullName}#${number}`,
+        repo: repoFullName,
+        number: parseInt(number),
+        title: `PR #${number}`,
+        url: line,
+        state,
+        author: { login: author },
+        updatedAt: new Date().toISOString(),
+        repository: { nameWithOwner: repoFullName },
+        metadata: {
+          age,
+          reviewDecision,
+          mergeable
+        }
+      });
+      
+      // Skip the metadata lines we just processed
+      i += 4;
+    }
     
     return prs;
   } catch (error) {
@@ -65,42 +84,51 @@ async function runGhReportCommand() {
   try {
     const { stdout } = await execAsync('ghreport');
     
-    // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
-    const lines = stdout.split('\n').filter(line => line.trim());
-    const prs = lines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
-      if (match) {
-        const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
-        const repoFullName = `${owner}/${repo}`;
-        
-        // Map review decision emoji to state
-        let state = 'OPEN';
-        if (reviewDecision.includes('✅')) {
-          state = 'APPROVED';
-        } else if (reviewDecision.includes('🔍')) {
-          state = 'REVIEW_REQUIRED';
-        }
-        
-        return {
-          id: `${repoFullName}#${number}`,
-          repo: repoFullName,
-          number: parseInt(number),
-          title: `PR #${number}`,
-          url: `https://github.com/${repoFullName}/pull/${number}`,
-          state,
-          author: { login: author },
-          updatedAt: new Date().toISOString(),
-          repository: { nameWithOwner: repoFullName },
-          metadata: {
-            age: age.trim(),
-            reviewDecision: reviewDecision.trim(),
-            mergeable: mergeable?.trim() || ''
-          }
-        };
-      }
-      return null;
-    }).filter(Boolean);
+    const lines = stdout.split('\n');
+    const prs = [];
     
+    // Multi-line format: URL, then 4 metadata lines
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line.startsWith('https://github.com/')) continue;
+      
+      const urlMatch = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+      if (!urlMatch) continue;
+      
+      const [, owner, repo, number] = urlMatch;
+      const repoFullName = `${owner}/${repo}`;
+      
+      const author = (lines[i + 1] || '').replace(/^\s*author:\s*/, '').trim();
+      const age = (lines[i + 2] || '').replace(/^\s*Age:\s*/, '').trim();
+      const reviewDecision = (lines[i + 3] || '').replace(/^\s*reviewDecision:\s*/, '').trim();
+      const mergeable = (lines[i + 4] || '').replace(/^\s*mergeable\s*/, '').trim();
+      
+      let state = 'OPEN';
+      if (reviewDecision.includes('✅')) {
+        state = 'APPROVED';
+      } else if (reviewDecision.includes('🔍')) {
+        state = 'REVIEW_REQUIRED';
+      }
+      
+      prs.push({
+        id: `${repoFullName}#${number}`,
+        repo: repoFullName,
+        number: parseInt(number),
+        title: `PR #${number}`,
+        url: line,
+        state,
+        author: { login: author },
+        updatedAt: new Date().toISOString(),
+        repository: { nameWithOwner: repoFullName },
+        metadata: {
+          age,
+          reviewDecision,
+          mergeable
+        }
+      });
+      
+      i += 4;
+    }
     return prs;
   } catch (error) {
     console.error('Error running ghreport command:', error.message);
