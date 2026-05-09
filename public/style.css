@@ -29,6 +29,10 @@
   --muted-hover: #d9d1ca;
   --accent: #d4956a;
   --accent-hover: #dea67e;
+  --btn: #c8beb6;
+  --btn-hover: #d9d1ca;
+  --btn-bg: rgba(200, 190, 182, 0.12);
+  --btn-bg-hover: rgba(200, 190, 182, 0.22);
   --radius: 8px;
   --radius-sm: 4px;
 }
@@ -135,49 +139,65 @@ h1 {
 
 .btn {
   padding: 0.5rem 1rem;
-  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 600;
   transition: all 0.15s;
   letter-spacing: -0.01em;
+  color: var(--btn);
 }
 
+.btn:hover {
+  background: var(--btn-bg-hover);
+  color: var(--btn-hover);
+}
+
+/* Semantic button variants - use sparingly for critical actions */
 .btn-primary {
-  background: var(--primary);
-  color: white;
+  background: rgba(124, 179, 224, 0.12);
+  color: var(--primary);
+  border-color: transparent;
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover);
+  background: rgba(124, 179, 224, 0.22);
+  color: var(--primary);
 }
 
 .btn-success {
-  background: var(--success);
-  color: white;
+  background: rgba(110, 201, 120, 0.12);
+  color: var(--success);
+  border-color: transparent;
 }
 
 .btn-success:hover {
-  background: var(--success-hover);
+  background: rgba(110, 201, 120, 0.22);
+  color: var(--success);
 }
 
 .btn-danger {
-  background: var(--danger);
-  color: white;
+  background: rgba(232, 124, 115, 0.12);
+  color: var(--danger);
+  border-color: transparent;
 }
 
 .btn-danger:hover {
-  background: var(--danger-hover);
+  background: rgba(232, 124, 115, 0.22);
+  color: var(--danger);
 }
 
 .btn-muted {
-  background: var(--muted-bg);
-  color: white;
+  background: var(--btn-bg);
+  color: var(--btn);
+  border-color: transparent;
 }
 
 .btn-muted:hover {
-  background: var(--muted-hover);
+  background: var(--btn-bg-hover);
+  color: var(--btn-hover);
 }
 
 .btn-small {
@@ -185,13 +205,16 @@ h1 {
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  border: 1px solid transparent;
+  color: var(--btn);
   transition: all 0.15s;
 }
 
 .btn-small:hover {
   transform: none;
-  background: var(--surface-hover);
+  background: var(--btn-bg-hover);
+  color: var(--btn-hover);
 }
 
 .btn-small:active {
@@ -200,21 +223,25 @@ h1 {
 }
 
 .btn-info {
-  background: var(--info);
-  color: white;
+  background: rgba(124, 179, 224, 0.12);
+  color: var(--info);
+  border-color: transparent;
 }
 
 .btn-info:hover {
-  background: var(--info-hover);
+  background: rgba(124, 179, 224, 0.22);
+  color: var(--info);
 }
 
 .btn-warning {
-  background: var(--warning);
-  color: white;
+  background: rgba(212, 149, 106, 0.12);
+  color: var(--warning);
+  border-color: transparent;
 }
 
 .btn-warning:hover {
-  background: var(--warning-hover);
+  background: rgba(212, 149, 106, 0.22);
+  color: var(--warning);
 }
 
 .filters {
