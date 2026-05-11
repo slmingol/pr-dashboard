@@ -166,20 +166,32 @@ async function checkUserReview(owner, repo, number, username) {
     const data = JSON.parse(stdout);
     
     if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-      // Find the most recent review by this user
+      // Find the most recent NON-DISMISSED review by this user
       const userReviews = data.reviews
         .filter(r => r.author && r.author.login && r.author.login === username)
+        .filter(r => r.state !== 'DISMISSED') // Exclude dismissed reviews
         .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+      
+      // Log all reviews for debugging
+      const allUserReviews = data.reviews.filter(r => r.author && r.author.login && r.author.login === username);
+      if (allUserReviews.length > 0) {
+        console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username}:`, 
+          allUserReviews.map(r => `${r.state} (${r.submittedAt})`).join(', '));
+      }
       
       if (userReviews.length > 0) {
         const latestReview = userReviews[0];
-        console.log(`PR ${owner}/${repo}#${number}: User ${username} review state: ${latestReview.state}`);
+        console.log(`PR ${owner}/${repo}#${number}: Using review state: ${latestReview.state} from ${latestReview.submittedAt}`);
         return {
           hasReviewed: true,
           state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
           submittedAt: latestReview.submittedAt,
           updatedAt: data.updatedAt
         };
+      } else if (allUserReviews.length > 0) {
+        // All reviews were dismissed - treat as not reviewed
+        console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username} were dismissed`);
+        return { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true };
       }
     }
     

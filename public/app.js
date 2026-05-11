@@ -2,6 +2,7 @@ let allPRs = [];
 let filteredPRs = [];
 let hiddenPRs = {}; // Changed to object: { 'repo#number': { hiddenAt: timestamp, updatedAt: timestamp } }
 let previousPRIds = new Set(); // Track PRs from last refresh to highlight new ones
+let reviewStateHistory = {}; // Track review state changes for debugging
 
 // Load hidden PRs from localStorage
 function loadHiddenPRs() {
@@ -131,6 +132,32 @@ async function fetchPRs() {
     
     if (data.success) {
       allPRs = data.prs;
+      
+      // Track review state changes for debugging
+      allPRs.forEach(pr => {
+        const prId = `${pr.repo}#${pr.number}`;
+        const currentReviewState = pr.reviewStatus?.state || 'NONE';
+        const hasReviewed = pr.reviewStatus?.hasReviewed || false;
+        const allDismissed = pr.reviewStatus?.allDismissed || false;
+        
+        if (reviewStateHistory[prId]) {
+          const prevState = reviewStateHistory[prId];
+          if (prevState.state !== currentReviewState || prevState.hasReviewed !== hasReviewed) {
+            console.warn(`⚠️ Review state changed for ${prId}:`);
+            console.warn(`  Previous: hasReviewed=${prevState.hasReviewed}, state=${prevState.state}`);
+            console.warn(`  Current:  hasReviewed=${hasReviewed}, state=${currentReviewState}, allDismissed=${allDismissed}`);
+            console.warn(`  PR updatedAt: ${pr.updatedAt}`);
+          }
+        }
+        
+        reviewStateHistory[prId] = {
+          state: currentReviewState,
+          hasReviewed: hasReviewed,
+          allDismissed: allDismissed,
+          updatedAt: pr.updatedAt,
+          lastChecked: new Date().toISOString()
+        };
+      });
       
       // Detect new PRs since last refresh
       const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
@@ -290,6 +317,9 @@ function renderPRs(prs, showHidden = false) {
         } else if (reviewStatus.state === 'COMMENTED') {
           reviewBadge = '<span class="state-badge state-info" title="You commented">💬 Commented</span>';
         }
+      } else if (reviewStatus.allDismissed) {
+        // Show when all reviews were dismissed (usually due to new commits)
+        reviewBadge = '<span class="state-badge state-muted" title="Your previous review was dismissed due to new changes">🔄 Review Dismissed</span>';
       }
       
       // Check if title is just generic "PR #X" format
