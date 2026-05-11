@@ -157,11 +157,11 @@ async function getCurrentUser() {
   }
 }
 
-// Check if current user has reviewed a PR
+// Check if current user has reviewed a PR and get updatedAt
 async function checkUserReview(owner, repo, number, username) {
   try {
     const { stdout } = await execAsync(
-      `gh pr view ${number} --repo ${owner}/${repo} --json reviews`
+      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt`
     );
     const data = JSON.parse(stdout);
     
@@ -177,19 +177,20 @@ async function checkUserReview(owner, repo, number, username) {
         return {
           hasReviewed: true,
           state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
-          submittedAt: latestReview.submittedAt
+          submittedAt: latestReview.submittedAt,
+          updatedAt: data.updatedAt
         };
       }
     }
     
-    return { hasReviewed: false };
+    return { hasReviewed: false, updatedAt: data.updatedAt };
   } catch (error) {
     // Silently fail for 404/403 errors (PR might be deleted or inaccessible)
     if (error.message.includes('404') || error.message.includes('403') || error.message.includes('Not Found')) {
-      return { hasReviewed: false };
+      return { hasReviewed: false, updatedAt: null };
     }
     console.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
-    return { hasReviewed: false };
+    return { hasReviewed: false, updatedAt: null };
   }
 }
 
@@ -222,10 +223,14 @@ app.get('/api/prs', async (req, res) => {
         try {
           const [owner, repo] = pr.repo.split('/');
           const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
+          // Update the PR's updatedAt with the actual value from GitHub
+          if (reviewStatus.updatedAt) {
+            pr.updatedAt = reviewStatus.updatedAt;
+          }
           return { ...pr, reviewStatus };
         } catch (error) {
           console.error(`Failed to check review for PR ${pr.repo}#${pr.number}:`, error.message);
-          return { ...pr, reviewStatus: { hasReviewed: false } };
+          return { ...pr, reviewStatus: { hasReviewed: false, updatedAt: null } };
         }
       });
       

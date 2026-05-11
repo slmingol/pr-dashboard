@@ -1,30 +1,50 @@
 let allPRs = [];
 let filteredPRs = [];
-let hiddenPRs = new Set();
+let hiddenPRs = {}; // Changed to object: { 'repo#number': { hiddenAt: timestamp, updatedAt: timestamp } }
 let previousPRIds = new Set(); // Track PRs from last refresh to highlight new ones
 
 // Load hidden PRs from localStorage
 function loadHiddenPRs() {
   const stored = localStorage.getItem('hiddenPRs');
   if (stored) {
-    hiddenPRs = new Set(JSON.parse(stored));
+    try {
+      const parsed = JSON.parse(stored);
+      // Handle legacy format (array of strings) and convert to new format
+      if (Array.isArray(parsed)) {
+        hiddenPRs = {};
+        parsed.forEach(prId => {
+          hiddenPRs[prId] = { hiddenAt: new Date().toISOString(), updatedAt: null };
+        });
+        saveHiddenPRs(); // Save in new format
+      } else {
+        hiddenPRs = parsed;
+      }
+    } catch (e) {
+      console.error('Error loading hidden PRs:', e);
+      hiddenPRs = {};
+    }
   }
   updateHiddenCount();
 }
 
 // Save hidden PRs to localStorage
 function saveHiddenPRs() {
-  localStorage.setItem('hiddenPRs', JSON.stringify([...hiddenPRs]));
+  localStorage.setItem('hiddenPRs', JSON.stringify(hiddenPRs));
   updateHiddenCount();
 }
 
 // Toggle PR hidden state
 function toggleHidePR(prId, owner, repo, number) {
-  if (hiddenPRs.has(prId)) {
-    hiddenPRs.delete(prId);
+  if (hiddenPRs[prId]) {
+    delete hiddenPRs[prId];
     showToast(`Unhidden PR #${number}`, 'info', '', 2000);
   } else {
-    hiddenPRs.add(prId);
+    // Find the PR to get its updatedAt timestamp
+    const pr = allPRs.find(p => `${p.repo}#${p.number}` === prId);
+    hiddenPRs[prId] = {
+      hiddenAt: new Date().toISOString(),
+      updatedAt: pr?.updatedAt || null
+    };
     showToast(`Hidden PR #${number}`, 'success', '', 2000);
   }
   saveHiddenPRs();
@@ -35,14 +55,14 @@ function toggleHidePR(prId, owner, repo, number) {
 function updateHiddenCount() {
   const count = document.getElementById('hidden-count');
   if (count) {
-    count.textContent = hiddenPRs.size;
+    count.textContent = Object.keys(hiddenPRs).length;
   }
 }
 
 // Update statistics
 function updateStats() {
   const total = allPRs.length;
-  const hidden = hiddenPRs.size;
+  const hidden = Object.keys(hiddenPRs).length;
   const displayed = filteredPRs.length; // Actually visible on screen
   // Count PRs that match filters but might be hidden
   const matchingFilters = allPRs.filter(pr => {
@@ -115,6 +135,26 @@ async function fetchPRs() {
       // Detect new PRs since last refresh
       const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
       
+      // Check if any hidden PRs have been updated and should be unhidden
+      let unhiddenCount = 0;
+      for (const prId of Object.keys(hiddenPRs)) {
+        const pr = allPRs.find(p => `${p.repo}#${p.number}` === prId);
+        if (pr && hiddenPRs[prId].updatedAt) {
+          // Compare updatedAt timestamps
+          if (pr.updatedAt && pr.updatedAt !== hiddenPRs[prId].updatedAt) {
+            console.log(`PR ${prId} was updated: ${hiddenPRs[prId].updatedAt} -> ${pr.updatedAt}`);
+            delete hiddenPRs[prId];
+            pr.isNew = true; // Mark as new since it was updated
+            unhiddenCount++;
+          }
+        }
+      }
+      
+      if (unhiddenCount > 0) {
+        saveHiddenPRs(); // Save updated hidden list
+        showToast(`${unhiddenCount} hidden PR${unhiddenCount > 1 ? 's' : ''} updated and unhidden`, 'info', '', 4000);
+      }
+      
       // Mark new PRs (PRs that weren't in the previous set)
       let newPRCount = 0;
       allPRs.forEach(pr => {
@@ -122,7 +162,7 @@ async function fetchPRs() {
         if (previousPRIds.size > 0 && !previousPRIds.has(prId)) {
           pr.isNew = true;
           newPRCount++;
-        } else {
+        } else if (!pr.isNew) { // Don't overwrite if already marked as new from unhiding
           pr.isNew = false;
         }
       });
@@ -131,12 +171,17 @@ async function fetchPRs() {
       previousPRIds = currentPRIds;
       
       // Clean up hiddenPRs - remove any PRs that no longer exist
-      const cleanedHiddenPRs = new Set([...hiddenPRs].filter(prId => currentPRIds.has(prId)));
+      const cleanedHiddenPRs = {};
+      for (const prId of Object.keys(hiddenPRs)) {
+        if (currentPRIds.has(prId)) {
+          cleanedHiddenPRs[prId] = hiddenPRs[prId];
+        }
+      }
       
       // Update hiddenPRs if we removed stale entries
-      if (cleanedHiddenPRs.size !== hiddenPRs.size) {
+      if (Object.keys(cleanedHiddenPRs).length !== Object.keys(hiddenPRs).length) {
         hiddenPRs = cleanedHiddenPRs;
-        localStorage.setItem('hiddenPRs', JSON.stringify([...hiddenPRs]));
+        localStorage.setItem('hiddenPRs', JSON.stringify(hiddenPRs));
       }
       
       updateStats();
@@ -173,7 +218,7 @@ function filterAndRenderPRs() {
     const matchesState = stateFilter === 'all' || pr.state === stateFilter;
     
     const prId = `${pr.repo}#${pr.number}`;
-    const isHidden = hiddenPRs.has(prId);
+    const isHidden = hiddenPRs.hasOwnProperty(prId);
     const matchesHidden = showHidden || !isHidden;
     
     return matchesSearch && matchesState && matchesHidden;
@@ -226,7 +271,7 @@ function renderPRs(prs, showHidden = false) {
       const number = pr.number;
       const state = pr.state || 'OPEN';
       const prId = `${pr.repo}#${number}`;
-      const isHidden = hiddenPRs.has(prId);
+      const isHidden = hiddenPRs.hasOwnProperty(prId);
       
       // Format metadata if available
       const metadata = pr.metadata || {};
