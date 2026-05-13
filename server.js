@@ -8,6 +8,10 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Cache for review statuses to handle transient API failures
+const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -157,13 +161,25 @@ async function getCurrentUser() {
   }
 }
 
-// Check if current user has reviewed a PR and get updatedAt
-async function checkUserReview(owner, repo, number, username) {
+// Check if current user has reviewed a PR and get updatedAt (with caching and retry)
+async function checkUserReview(owner, repo, number, username, retries = 2) {
+  const cacheKey = `${owner}/${repo}#${number}`;
+  
+  // Check cache first
+  const cached = reviewCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    console.log(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+    return cached.status;
+  }
+  
   try {
     const { stdout } = await execAsync(
-      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt`
+      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt`,
+      { timeout: 10000 } // 10 second timeout
     );
     const data = JSON.parse(stdout);
+    
+    let result;
     
     if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
       // Find the most recent NON-DISMISSED review by this user
@@ -182,7 +198,7 @@ async function checkUserReview(owner, repo, number, username) {
       if (userReviews.length > 0) {
         const latestReview = userReviews[0];
         console.log(`PR ${owner}/${repo}#${number}: Using review state: ${latestReview.state} from ${latestReview.submittedAt}`);
-        return {
+        result = {
           hasReviewed: true,
           state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
           submittedAt: latestReview.submittedAt,
@@ -191,18 +207,43 @@ async function checkUserReview(owner, repo, number, username) {
       } else if (allUserReviews.length > 0) {
         // All reviews were dismissed - treat as not reviewed
         console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username} were dismissed`);
-        return { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true };
+        result = { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true };
+      } else {
+        result = { hasReviewed: false, updatedAt: data.updatedAt };
       }
+    } else {
+      result = { hasReviewed: false, updatedAt: data.updatedAt };
     }
     
-    return { hasReviewed: false, updatedAt: data.updatedAt };
+    // Cache successful result
+    reviewCache.set(cacheKey, { status: result, timestamp: Date.now() });
+    return result;
+    
   } catch (error) {
-    // Silently fail for 404/403 errors (PR might be deleted or inaccessible)
+    // Handle different error types
     if (error.message.includes('404') || error.message.includes('403') || error.message.includes('Not Found')) {
-      return { hasReviewed: false, updatedAt: null };
+      const result = { hasReviewed: false, updatedAt: null };
+      reviewCache.set(cacheKey, { status: result, timestamp: Date.now() });
+      return result;
     }
+    
+    // Connection errors - retry with exponential backoff
+    if ((error.message.includes('connection refused') || error.message.includes('ECONNREFUSED') || 
+         error.message.includes('timeout')) && retries > 0) {
+      const delay = (3 - retries) * 1000; // 1s, 2s
+      console.log(`PR ${cacheKey}: Connection error, retrying in ${delay}ms (${retries} retries left)...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return checkUserReview(owner, repo, number, username, retries - 1);
+    }
+    
+    // If we have cached data (even if expired), use it as fallback
+    if (cached) {
+      console.warn(`PR ${cacheKey}: Using stale cache due to error (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return { ...cached.status, stale: true };
+    }
+    
     console.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
-    return { hasReviewed: false, updatedAt: null };
+    return { hasReviewed: false, updatedAt: null, error: true };
   }
 }
 

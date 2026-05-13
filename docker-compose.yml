@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   pr-dashboard:
     build: .

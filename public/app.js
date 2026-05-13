@@ -310,16 +310,20 @@ function renderPRs(prs, showHidden = false) {
       const reviewStatus = pr.reviewStatus || {};
       let reviewBadge = '';
       if (reviewStatus.hasReviewed) {
+        const staleIndicator = reviewStatus.stale ? ' (cached)' : '';
         if (reviewStatus.state === 'APPROVED') {
-          reviewBadge = '<span class="state-badge state-success" title="You approved this PR">✓ Reviewed</span>';
+          reviewBadge = `<span class="state-badge state-success" title="You approved this PR${staleIndicator}">✓ Reviewed${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         } else if (reviewStatus.state === 'CHANGES_REQUESTED') {
-          reviewBadge = '<span class="state-badge state-warning" title="You requested changes">⚠️ Changes Requested</span>';
+          reviewBadge = `<span class="state-badge state-warning" title="You requested changes${staleIndicator}">⚠️ Changes Requested${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         } else if (reviewStatus.state === 'COMMENTED') {
-          reviewBadge = '<span class="state-badge state-info" title="You commented">💬 Commented</span>';
+          reviewBadge = `<span class="state-badge state-info" title="You commented${staleIndicator}">💬 Commented${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         }
       } else if (reviewStatus.allDismissed) {
         // Show when all reviews were dismissed (usually due to new commits)
         reviewBadge = '<span class="state-badge state-muted" title="Your previous review was dismissed due to new changes">🔄 Review Dismissed</span>';
+      } else if (reviewStatus.error && !reviewStatus.stale) {
+        // Show when we couldn't fetch review status and have no cache
+        reviewBadge = '<span class="state-badge state-muted" title="Could not fetch review status - may need to refresh">❓ Review Status Unknown</span>';
       }
       
       // Check if title is just generic "PR #X" format
