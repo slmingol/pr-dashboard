@@ -365,6 +365,11 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
     console.log(`Review command output: ${stdout}`);
     if (stderr) console.log(`Review command stderr: ${stderr}`);
     
+    // Invalidate cache for this PR so next fetch gets fresh status
+    const cacheKey = `${owner}/${repo}#${number}`;
+    reviewCache.delete(cacheKey);
+    console.log(`Invalidated cache for ${cacheKey}`);
+    
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error(`Review command failed: ${error.message}`);
