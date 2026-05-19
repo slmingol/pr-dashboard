@@ -381,6 +381,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/version', (req, res) => {
+  const { version } = require('./package.json');
+  res.json({ version });
+});
+
 // SSE endpoint for ghreport refresh with progress tracking
 app.get('/api/refresh-ghreport-stream', async (req, res) => {
   // Set up SSE headers

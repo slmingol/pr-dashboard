@@ -817,3 +817,14 @@ label {
     opacity: 0;
   }
 }
+
+.app-version {
+  position: fixed;
+  bottom: 0.6rem;
+  right: 0.9rem;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}

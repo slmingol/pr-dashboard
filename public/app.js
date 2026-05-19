@@ -933,7 +933,16 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+async function loadVersion() {
+  try {
+    const res = await fetch('/api/version');
+    const { version } = await res.json();
+    document.getElementById('app-version').textContent = `v${version}`;
+  } catch (_) {}
+}
+
 // Initial load
 loadTheme();
 loadHiddenPRs();
 fetchPRs();
+loadVersion();
