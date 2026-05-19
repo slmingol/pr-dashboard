@@ -5,7 +5,7 @@ RUN apk add --no-cache github-cli git go
 
 # Install ghreport (allow Go to auto-download required toolchain version)
 ENV GOTOOLCHAIN=auto
-RUN go install github.com/jmainguy/ghreport@latest
+RUN go install github.com/slmingol/ghreport@latest
 
 # Add Go bin to PATH
 ENV PATH="/root/go/bin:${PATH}"
