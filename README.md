@@ -210,16 +210,21 @@ If your ghreport format differs, edit the `loadPRsFromGhReport()` function in `s
 ### File Structure
 ```
 pr-dashboard/
-├── server.js              # Express backend with gh CLI integration
 ├── public/
 │   ├── index.html        # Main HTML page
 │   ├── app.js            # Frontend JavaScript (UI logic)
 │   └── style.css         # Theming and layout styles
+├── scripts/
+│   ├── start.sh          # Build and start container
+│   └── stop.sh           # Stop container
+├── examples/
+│   └── ghreport-sample.txt  # Sample ghreport output format
+├── server.js              # Express backend with gh CLI integration
 ├── docker-compose.yml    # Container orchestration
 ├── Dockerfile            # Container build config
 ├── package.json          # Node.js dependencies
-├── .env                  # Environment variables (gitignored)
-└── README.md            # This file
+├── .env.example          # Environment variable template
+└── README.md             # This file
 ```
 
 ## Development

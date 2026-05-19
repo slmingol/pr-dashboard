@@ -47,7 +47,7 @@ if $COMPOSE_CMD ps | grep -q "Up"; then
     echo "🌐 Open http://localhost:3000 in your browser"
     echo ""
     echo "View logs: $COMPOSE_CMD logs -f"
-    echo "Stop: ./stop.sh"
+    echo "Stop: ./scripts/stop.sh"
 else
     echo "⚠️  Service may not have started properly. Check logs with:"
     echo "   $COMPOSE_CMD logs -f"
