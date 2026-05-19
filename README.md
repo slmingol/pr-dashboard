@@ -42,7 +42,7 @@ A containerized pull request dashboard that integrates with your `ghreport` CLI 
   - 🟠 **Comment** (Orange) - Add comment
   - ✅ **Approve** (Green) - Positive review
   - ❌ **Reject** (Red) - Request changes
-- **Smart Title Display**: Hides redundant generic titles like "PR #123"
+- **Smart Title Display**: Hides generic "PR #NNN" titles (ghreport does not include PR titles; all titles are generic)
 - **Larger Buttons**: Improved hit targets and readability (13px font, 8px/14px padding)
 
 ## Prerequisites
@@ -170,7 +170,7 @@ Set in `.env` file or `docker-compose.yml`:
 
 - `GH_TOKEN` - **Required**: GitHub personal access token (for gh CLI)
 - `GITHUB_TOKEN` - **Auto-set**: Same as GH_TOKEN (for ghreport authentication)
-- `subscribedRepos` - **Optional**: Space-separated list of repos to monitor (e.g., "org/repo1 org/repo2")
+- `subscribedRepos` - **Optional**: Space-separated list of repos to monitor (e.g., "org/repo1 org/repo2"). Passed through to `ghreport` inside the container — has no effect in local dev mode.
 - `NODE_ENV` - Node environment (default: `production`)
 - `PORT` - Server port (default: `3000`)
 - `GHREPORT_OUTPUT` - Path to ghreport file inside container (default: `/data/ghreport.txt`)
@@ -252,8 +252,10 @@ Open http://localhost:3000
 - `GET /api/pr/:owner/:repo/:number/diff` - Get PR diff
 - `POST /api/pr/:owner/:repo/:number/checkout` - Checkout PR locally
 - `POST /api/pr/:owner/:repo/:number/comment` - Add comment
-- `POST /api/pr/:owner/:repo/:number/review` - Submit review (approve/request-changes)
-- `POST /api/refresh-ghreport` - Re-run ghreport command to fetch latest PRs from GitHub
+- `POST /api/pr/:owner/:repo/:number/review` - Submit review (approve/request-changes/comment)
+- `GET /api/refresh-ghreport-stream` - Re-run ghreport with SSE progress stream (used by UI)
+- `POST /api/refresh-ghreport` - Re-run ghreport (legacy, no progress stream)
+- `GET /api/health` - Health check
 
 ## Troubleshooting
 
@@ -336,31 +338,12 @@ Open http://localhost:3000
 
 - **Parallel Review Fetching**: All PR review statuses fetched concurrently
 - **Error Resilience**: Individual PR failures don't break entire list
-- **Caching**: Browser localStorage for theme and hidden PR preferences
-- **Efficient Updates**: Only re-renders when data changes
+- **Server-Side Review Cache**: Review statuses cached in-memory for 5 minutes; stale cache used as fallback on API errors
+- **Browser Storage**: Theme and hidden PR preferences cached in localStorage
 
 ## Contributing
 
 Contributions welcome! Please feel free to submit issues or pull requests.
-
-## License
-
-[Your License Here]
-
-## Troubleshooting
-
-**No PRs showing:**
-- Check ghreport output path is correct
-- Verify gh CLI is authenticated: `docker exec pr-dashboard gh auth status`
-- Check logs: `docker-compose logs -f`
-
-**Checkout fails:**
-- Ensure git config and SSH keys are mounted
-- Verify repository access
-
-**Authentication errors:**
-- Verify `~/.config/gh` is mounted correctly
-- Re-authenticate gh CLI on host: `gh auth login`
 
 ## Security Notes
 

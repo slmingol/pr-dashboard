@@ -1,7 +1,17 @@
 let allPRs = [];
 let filteredPRs = [];
-let hiddenPRs = {}; // Changed to object: { 'repo#number': { hiddenAt: timestamp, updatedAt: timestamp } }
-let previousPRIds = new Set(); // Track PRs from last refresh to highlight new ones
+let hiddenPRs = {};
+let renderLimit = 25;
+
+function parseAgeDays(ageStr) {
+  if (!ageStr) return 0;
+  const daysMatch = ageStr.match(/(\d+)\s*days?/i);
+  if (daysMatch) return parseInt(daysMatch[1], 10);
+  const hoursMatch = ageStr.match(/(\d+)\s*hours?/i);
+  if (hoursMatch) return 0;
+  return 0;
+}
+let previousPRIds = new Set();
 let reviewStateHistory = {}; // Track review state changes for debugging
 
 // Load hidden PRs from localStorage
@@ -237,6 +247,7 @@ function filterAndRenderPRs() {
   const stateFilter = document.getElementById('state-filter').value;
   const showHidden = document.getElementById('show-hidden').checked;
   
+  renderLimit = 25;
   filteredPRs = allPRs.filter(pr => {
     const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) || 
                          pr.repo?.toLowerCase().includes(searchTerm) ||
@@ -280,20 +291,27 @@ function renderPRs(prs, showHidden = false) {
     grouped[repo].sort((a, b) => b.number - a.number);
   });
   
-  // Render grouped PRs
+  // Render grouped PRs up to renderLimit
   let html = '';
-  sortedRepos.forEach(repo => {
+  let renderedCount = 0;
+  for (const repo of sortedRepos) {
+    if (renderedCount >= renderLimit) break;
     const repoPRs = grouped[repo];
+    const prsToRender = repoPRs.slice(0, renderLimit - renderedCount);
+    const countLabel = prsToRender.length < repoPRs.length
+      ? `${prsToRender.length}/${repoPRs.length} PRs`
+      : `${repoPRs.length} PR${repoPRs.length !== 1 ? 's' : ''}`;
     html += `
       <div class="repo-group">
         <div class="repo-header">
           <h2 class="repo-name">📦 ${repo}</h2>
-          <span class="repo-count">${repoPRs.length} PR${repoPRs.length !== 1 ? 's' : ''}</span>
+          <span class="repo-count">${countLabel}</span>
         </div>
         <div class="repo-prs">
     `;
     
-    repoPRs.forEach(pr => {
+    prsToRender.forEach(pr => {
+      renderedCount++;
       const [owner, repoName] = (pr.repository?.nameWithOwner || pr.repo || '').split('/');
       const number = pr.number;
       const state = pr.state || 'OPEN';
@@ -329,9 +347,12 @@ function renderPRs(prs, showHidden = false) {
       // Check if title is just generic "PR #X" format
       const genericTitle = `PR #${number}`;
       const hasRealTitle = pr.title && pr.title !== genericTitle && pr.title !== 'Untitled PR';
-      
+
+      const ageDays = parseAgeDays(age);
+      const isStale = !isHidden && ageDays >= 365;
+
       html += `
-        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
+        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''} ${isStale ? 'pr-stale' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
             <div class="pr-info">
               <a href="${pr.url}" target="_blank" class="pr-number" title="Open PR in GitHub">#${number}</a>
@@ -340,11 +361,12 @@ function renderPRs(prs, showHidden = false) {
                 ${pr.author?.login ? `👤 ${pr.author.login}` : ''}
                 ${age ? `• ⏰ ${age}` : ''}
                 ${reviewDecision ? `• ${reviewDecision}` : ''}
-                ${mergeable ? `• ${mergeable}` : ''}
+                ${mergeable ? `• ${mergeable}` : pr.metadata ? '• ❓' : ''}
               </span>
               <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
               ${reviewBadge}
               ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
+              ${isStale ? `<span class="state-badge state-stale" title="${ageDays} days old">STALE</span>` : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
@@ -368,9 +390,22 @@ function renderPRs(prs, showHidden = false) {
         </div>
       </div>
     `;
-  });
-  
+  }
+
+  const remaining = prs.length - renderedCount;
+  if (remaining > 0) {
+    const nextBatch = Math.min(25, remaining);
+    html += `<div class="show-more-container">
+      <button class="btn btn-muted" onclick="showMorePRs()">Show ${nextBatch} more (${remaining} remaining)</button>
+    </div>`;
+  }
+
   prList.innerHTML = html;
+}
+
+function showMorePRs() {
+  renderLimit += 25;
+  renderPRs(filteredPRs, document.getElementById('show-hidden').checked);
 }
 
 // View PR details
