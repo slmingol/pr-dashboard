@@ -1,6 +1,6 @@
 # PR Dashboard
 
-A containerized pull request dashboard that integrates with your [`ghreport`](https://github.com/jmainguy/ghreport) CLI tool and GitHub CLI to provide a comprehensive view of all your PRs with review tracking and management features.
+A containerized pull request dashboard that integrates with your [`ghreport`](https://github.com/slmingol/ghreport) CLI tool and GitHub CLI to provide a comprehensive view of all your PRs with review tracking and management features.
 
 ## Features
 
@@ -195,7 +195,7 @@ If your ghreport format differs, edit the `loadPRsFromGhReport()` function in `s
 ### Container Stack
 - **Base Image**: `node:18-alpine`
 - **Additional Tools**: `github-cli`, `git`, `go` (for ghreport build)
-- **ghreport**: Automatically installed via `go install github.com/jmainguy/ghreport@latest` ([source](https://github.com/jmainguy/ghreport))
+- **ghreport**: Automatically installed via `go install github.com/jmainguy/ghreport@latest` ([source](https://github.com/slmingol/ghreport))
 - **Port**: 3000
 - **Health Check**: Automatic monitoring with 30s interval
 
