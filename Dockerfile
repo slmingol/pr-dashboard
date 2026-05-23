@@ -3,12 +3,14 @@ FROM node:18-alpine
 # Install gh CLI, git, and Go (for ghreport)
 RUN apk add --no-cache github-cli git go
 
-# Install ghreport (allow Go to auto-download required toolchain version)
+# Install ghreport — clone and build directly because the fork's go.mod still
+# declares the upstream module path, which go install rejects as a path mismatch
 ENV GOTOOLCHAIN=auto
-RUN go install github.com/slmingol/ghreport@latest
+RUN git clone --depth=1 https://github.com/slmingol/ghreport /tmp/ghreport \
+    && cd /tmp/ghreport \
+    && go build -o /usr/local/bin/ghreport . \
+    && rm -rf /tmp/ghreport
 
-# Add Go bin to PATH
-ENV PATH="/root/go/bin:${PATH}"
 
 WORKDIR /app
 

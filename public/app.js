@@ -441,28 +441,109 @@ async function viewDetails(owner, repo, number) {
   }
 }
 
+function buildSideBySideDiff(diffText) {
+  const lines = diffText.split('\n');
+  const rows = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') ||
+        line.startsWith('new file') || line.startsWith('deleted file') || line.startsWith('old mode') ||
+        line.startsWith('new mode') || line.startsWith('Binary') || line.startsWith('similarity') || line.startsWith('rename')) {
+      rows.push({ type: 'header', content: line });
+      i++;
+    } else if (line.startsWith('@@')) {
+      rows.push({ type: 'hunk', content: line });
+      i++;
+    } else if (line.startsWith('-') || line.startsWith('+')) {
+      const removed = [];
+      const added = [];
+      while (i < lines.length && (lines[i].startsWith('-') || lines[i].startsWith('+'))) {
+        if (lines[i].startsWith('-')) removed.push(lines[i].slice(1));
+        else added.push(lines[i].slice(1));
+        i++;
+      }
+      const maxLen = Math.max(removed.length, added.length);
+      for (let j = 0; j < maxLen; j++) {
+        rows.push({ type: 'change', left: j < removed.length ? removed[j] : null, right: j < added.length ? added[j] : null });
+      }
+    } else if (line.startsWith(' ')) {
+      rows.push({ type: 'context', content: line.slice(1) });
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return rows;
+}
+
+function renderSideBySideHtml(rows) {
+  return '<table class="diff-table">' + rows.map(row => {
+    if (row.type === 'header') return `<tr class="diff-file-header"><td colspan="2">${escapeHtml(row.content)}</td></tr>`;
+    if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td colspan="2">${escapeHtml(row.content)}</td></tr>`;
+    if (row.type === 'context') {
+      const c = escapeHtml(row.content);
+      return `<tr><td class="diff-split-context">${c}</td><td class="diff-split-context">${c}</td></tr>`;
+    }
+    if (row.type === 'change') {
+      const leftClass = row.left !== null ? 'diff-split-remove' : 'diff-split-empty';
+      const rightClass = row.right !== null ? 'diff-split-add' : 'diff-split-empty';
+      return `<tr><td class="${leftClass}">${row.left !== null ? escapeHtml(row.left) : ''}</td><td class="${rightClass}">${row.right !== null ? escapeHtml(row.right) : ''}</td></tr>`;
+    }
+    return '';
+  }).join('') + '</table>';
+}
+
+function switchDiffView(view) {
+  const unifiedView = document.getElementById('diff-unified-view');
+  const splitView = document.getElementById('diff-split-view');
+  const unifiedBtn = document.getElementById('diff-view-unified');
+  const splitBtn = document.getElementById('diff-view-split');
+  if (view === 'unified') {
+    unifiedView.style.display = '';
+    splitView.style.display = 'none';
+    unifiedBtn.className = 'btn btn-small btn-primary';
+    splitBtn.className = 'btn btn-small btn-muted';
+  } else {
+    unifiedView.style.display = 'none';
+    splitView.style.display = '';
+    unifiedBtn.className = 'btn btn-small btn-muted';
+    splitBtn.className = 'btn btn-small btn-primary';
+  }
+}
+
 // View diff
 async function viewDiff(owner, repo, number) {
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/diff`);
     const data = await response.json();
-    
+
     if (data.success) {
       const diffHtml = data.diff.split('\n').map(line => {
         let className = 'diff-line';
-        if (line.startsWith('+')) className += ' diff-add';
-        if (line.startsWith('-')) className += ' diff-remove';
+        if (line.startsWith('+') && !line.startsWith('+++')) className += ' diff-add';
+        if (line.startsWith('-') && !line.startsWith('---')) className += ' diff-remove';
         return `<div class="${className}">${escapeHtml(line)}</div>`;
       }).join('');
-      
+
+      const splitHtml = renderSideBySideHtml(buildSideBySideDiff(data.diff));
+
+      const buttonsHtml = `<div class="diff-actions">
+        <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
+        <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
+        <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>
+      </div>`;
+
       showModal(`
         <h2>Diff for ${owner}/${repo} #${number}</h2>
-        <div class="diff-container">${diffHtml}</div>
-        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">✓ Approve</button>
-          <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">✓ Approve + Comment</button>
-          <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">✗ Request Changes</button>
+        ${buttonsHtml}
+        <div class="diff-view-toggle">
+          <button id="diff-view-unified" class="btn btn-small btn-primary" onclick="switchDiffView('unified')">Unified</button>
+          <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>
         </div>
+        <div id="diff-unified-view" class="diff-container">${diffHtml}</div>
+        <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
+        ${buttonsHtml}
       `);
     } else {
       const errorMsg = data.error || 'Unknown error';
@@ -810,10 +891,11 @@ async function refreshGhReport() {
     
     // Use EventSource for Server-Sent Events
     const eventSource = new EventSource('/api/refresh-ghreport-stream');
-    
+    let refreshCompleted = false;
+
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
+
       if (data.error) {
         showToast(`Failed to refresh: ${data.message}`, 'error', 'Refresh Failed');
         eventSource.close();
@@ -822,15 +904,16 @@ async function refreshGhReport() {
         btn.textContent = originalText;
         return;
       }
-      
+
       if (data.progress !== undefined) {
         progressFill.style.width = `${data.progress}%`;
         if (data.message) {
           progressText.textContent = data.message;
         }
       }
-      
+
       if (data.complete) {
+        refreshCompleted = true;
         eventSource.close();
         showToast(`✓ Refreshed PR data. Found ${data.prCount} PRs.`, 'success', 'Data Refreshed');
         // Automatically reload the PR list after successful refresh
@@ -842,8 +925,9 @@ async function refreshGhReport() {
         }, 500);
       }
     };
-    
+
     eventSource.onerror = (error) => {
+      if (refreshCompleted) return;
       console.error('EventSource error:', error);
       eventSource.close();
       showToast('Connection error during refresh', 'error', 'Network Error');

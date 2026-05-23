@@ -388,67 +388,73 @@ app.get('/api/version', (req, res) => {
 
 // SSE endpoint for ghreport refresh with progress tracking
 app.get('/api/refresh-ghreport-stream', async (req, res) => {
-  // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  
-  const sendProgress = (percent, message) => {
-    res.write(`data: ${JSON.stringify({ progress: percent, message })}\n\n`);
+
+  const sendEvent = (data) => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
-  
+  const sendProgress = (percent, message) => sendEvent({ progress: percent, message });
+
+  let progressInterval = null;
+  let ghreportProcess = null;
+
+  req.on('close', () => {
+    clearInterval(progressInterval);
+    if (ghreportProcess) ghreportProcess.kill();
+  });
+
   try {
     sendProgress(0, 'Starting ghreport...');
-    
-    // Start ghreport command
-    const startTime = Date.now();
     sendProgress(10, 'Querying GitHub API...');
-    
-    // Use spawn to capture output as it comes
+
     const ghreport = spawn('ghreport');
-    
+    ghreportProcess = ghreport;
+
     let stdout = '';
     let stderr = '';
     let progressPercent = 10;
-    
-    // Simulate progress based on time (since ghreport doesn't report actual progress)
-    const progressInterval = setInterval(() => {
+
+    progressInterval = setInterval(() => {
       if (progressPercent < 90) {
         progressPercent += Math.random() * 15;
         if (progressPercent > 90) progressPercent = 90;
         sendProgress(Math.floor(progressPercent), 'Fetching PRs from repositories...');
       }
     }, 1000);
-    
+
+    ghreport.on('error', (err) => {
+      clearInterval(progressInterval);
+      console.error('ghreport spawn error:', err.message);
+      sendEvent({ error: true, message: `Failed to start ghreport: ${err.message}` });
+      res.end();
+    });
+
     ghreport.stdout.on('data', (data) => {
       stdout += data.toString();
-      // Count lines received so far for more accurate progress
       const currentLines = stdout.split('\n').filter(l => l.trim()).length;
       if (currentLines > 0) {
         sendProgress(Math.floor(progressPercent), `Found ${currentLines} PRs so far...`);
       }
     });
-    
+
     ghreport.stderr.on('data', (data) => {
       stderr += data.toString();
     });
-    
+
     ghreport.on('close', async (code) => {
       clearInterval(progressInterval);
-      
+
       if (code !== 0) {
-        sendProgress(100, 'Error');
-        res.write(`data: ${JSON.stringify({ 
-          error: true, 
-          message: `ghreport exited with code ${code}: ${stderr}` 
-        })}\n\n`);
+        const errDetail = (stderr || stdout || '(no output)').trim();
+        sendEvent({ error: true, message: `ghreport exited with code ${code}: ${errDetail}` });
         res.end();
         return;
       }
-      
+
       sendProgress(95, 'Processing results...');
-      
-      // Optionally write to file if GHREPORT_OUTPUT is set
+
       const outputPath = process.env.GHREPORT_OUTPUT;
       if (outputPath) {
         try {
@@ -458,25 +464,20 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
           console.error(`Failed to write to ${outputPath}:`, writeError.message);
         }
       }
-      
+
       const lineCount = stdout.split('\n').filter(line => line.trim()).length;
       console.log(`ghreport completed. Found ${lineCount} PRs`);
-      
+
       sendProgress(100, `Completed! Found ${lineCount} PRs.`);
-      res.write(`data: ${JSON.stringify({ 
-        success: true, 
-        prCount: lineCount,
-        complete: true
-      })}\n\n`);
-      res.end();
+      // Send complete but don't call res.end() — client closes the EventSource,
+      // which triggers req 'close' above for cleanup. Calling res.end() here races
+      // with the browser draining the last SSE message, causing spurious onerror.
+      sendEvent({ success: true, prCount: lineCount, complete: true });
     });
-    
+
   } catch (error) {
     console.error('ghreport command failed:', error.message);
-    res.write(`data: ${JSON.stringify({ 
-      error: true, 
-      message: error.message 
-    })}\n\n`);
+    sendEvent({ error: true, message: error.message });
     res.end();
   }
 });

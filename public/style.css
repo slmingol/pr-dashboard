@@ -664,6 +664,19 @@ h1 {
   justify-content: flex-end;
 }
 
+.diff-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin: 0.75rem 0;
+}
+
+.diff-view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
 .diff-container {
   background: var(--bg-deeper);
   padding: 1rem;
@@ -674,6 +687,53 @@ h1 {
   font-size: 0.875rem;
   line-height: 1.5;
 }
+
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.diff-table td {
+  width: 50%;
+  padding: 0 0.25rem;
+  white-space: pre;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-file-header td {
+  background: rgba(124, 179, 224, 0.1);
+  color: var(--text-muted);
+  padding: 0.25rem 0.5rem;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  width: 100%;
+}
+
+.diff-hunk-header td {
+  background: rgba(124, 179, 224, 0.06);
+  color: var(--text-muted);
+  padding: 0.15rem 0.5rem;
+  font-style: italic;
+}
+
+.diff-split-remove {
+  background: rgba(232, 124, 115, 0.2);
+  color: var(--danger);
+}
+
+.diff-split-add {
+  background: rgba(110, 201, 120, 0.2);
+  color: var(--success);
+}
+
+.diff-split-empty {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.diff-split-context {}
 
 .diff-line {
   white-space: pre;
