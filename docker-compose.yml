@@ -32,6 +32,8 @@ services:
       - GH_TOKEN=${GH_TOKEN:-}
       # ghreport requires GITHUB_TOKEN (same value as GH_TOKEN)
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      # slmingol/ghreport fork requires ghreportToken
+      - ghreportToken=${GH_TOKEN:-}
       # List of repositories for ghreport to monitor (space-separated)
       - subscribedRepos=${subscribedRepos:-}
     restart: unless-stopped
