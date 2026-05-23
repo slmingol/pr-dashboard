@@ -1,0 +1,15 @@
+# Dev override — auto-applied by `docker compose up`.
+# Mounts source files so changes are live without rebuilding.
+# server.js changes: node --watch auto-restarts the server.
+# public/ changes: served directly from mount, just hard-refresh browser.
+#
+# Production (no live mount): docker compose -f docker-compose.yml up --build
+
+services:
+  pr-dashboard:
+    volumes:
+      - ./server.js:/app/server.js
+      - ./public:/app/public
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
