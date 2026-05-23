@@ -10,6 +10,7 @@ services:
     volumes:
       - ./server.js:/app/server.js
       - ./public:/app/public
+      - ./package.json:/app/package.json
     command: npm run dev
     environment:
       - NODE_ENV=development
