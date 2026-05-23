@@ -11,6 +11,21 @@ function parseAgeDays(ageStr) {
   if (hoursMatch) return 0;
   return 0;
 }
+
+function daysAgoFromIso(isoStr) {
+  if (!isoStr) return 0;
+  return Math.floor((Date.now() - new Date(isoStr).getTime()) / 86400000);
+}
+
+function formatUpdatedDate(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const days = daysAgoFromIso(isoStr);
+  if (days === 0) return 'today';
+  if (days === 1) return '1d ago';
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 let previousPRIds = new Set();
 let reviewStateHistory = {}; // Track review state changes for debugging
 
@@ -348,8 +363,9 @@ function renderPRs(prs, showHidden = false) {
       const genericTitle = `PR #${number}`;
       const hasRealTitle = pr.title && pr.title !== genericTitle && pr.title !== 'Untitled PR';
 
-      const ageDays = parseAgeDays(age);
+      const ageDays = parseAgeDays(age) || daysAgoFromIso(pr.updatedAt);
       const isStale = !isHidden && ageDays >= 365;
+      const updatedLabel = age ? age : formatUpdatedDate(pr.updatedAt);
 
       html += `
         <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''} ${isStale ? 'pr-stale' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
@@ -359,7 +375,7 @@ function renderPRs(prs, showHidden = false) {
               ${hasRealTitle ? `<span class="pr-title">${pr.title}</span>` : ''}
               <span class="pr-meta-inline">
                 ${pr.author?.login ? `👤 ${pr.author.login}` : ''}
-                ${age ? `• ⏰ ${age}` : ''}
+                ${updatedLabel ? `• 📅 ${updatedLabel}` : ''}
                 ${reviewDecision ? `• ${reviewDecision}` : ''}
                 ${mergeable ? `• ${mergeable}` : pr.metadata ? '• ❓' : ''}
               </span>

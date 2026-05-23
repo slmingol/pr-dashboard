@@ -43,41 +43,28 @@ async function loadPRsFromGhReport() {
       joinedLines.push(currentLine.trim());
     }
     
-    // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
+    // Parse ghreport format: https://github.com/owner/repo/pull/NUMBER: createdAt DATETIME
     const prs = joinedLines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
+      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(.+))?/);
       if (match) {
-        const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
+        const [, owner, repo, number, createdAt] = match;
         const repoFullName = `${owner}/${repo}`;
-        
-        // Map review decision emoji to state
-        let state = 'OPEN';
-        if (reviewDecision.includes('✅')) {
-          state = 'APPROVED';
-        } else if (reviewDecision.includes('🔍')) {
-          state = 'REVIEW_REQUIRED';
-        }
-        
         return {
           id: `${repoFullName}#${number}`,
           repo: repoFullName,
           number: parseInt(number),
-          title: `PR #${number}`, // ghreport doesn't include title, we'll fetch it if needed
+          title: `PR #${number}`,
           url: `https://github.com/${repoFullName}/pull/${number}`,
-          state,
-          author: { login: author },
-          updatedAt: new Date().toISOString(),
+          state: 'OPEN',
+          author: { login: '' },
+          updatedAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
           repository: { nameWithOwner: repoFullName },
-          metadata: {
-            age: age.trim(),
-            reviewDecision: reviewDecision.trim(),
-            mergeable: mergeable?.trim() || ''
-          }
+          metadata: { age: '', reviewDecision: '', mergeable: '' }
         };
       }
       return null;
     }).filter(Boolean);
-    
+
     return prs;
   } catch (error) {
     console.error('Error reading ghreport:', error.message);
@@ -109,36 +96,23 @@ async function runGhReportCommand() {
       joinedLines.push(currentLine.trim());
     }
     
-    // Parse ghreport format: https://github.com/owner/repo/pull/123 author: username Age: X days reviewDecision: ... mergeable: ...
+    // Parse ghreport format: https://github.com/owner/repo/pull/NUMBER: createdAt DATETIME
     const prs = joinedLines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)\s+author:\s+(\S+)\s+Age:\s+(.+?)\s+reviewDecision:\s*([^\s]*)\s*mergeable:\s*(.*)/);
+      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(.+))?/);
       if (match) {
-        const [, owner, repo, number, author, age, reviewDecision, mergeable] = match;
+        const [, owner, repo, number, createdAt] = match;
         const repoFullName = `${owner}/${repo}`;
-        
-        // Map review decision emoji to state
-        let state = 'OPEN';
-        if (reviewDecision.includes('✅')) {
-          state = 'APPROVED';
-        } else if (reviewDecision.includes('🔍')) {
-          state = 'REVIEW_REQUIRED';
-        }
-        
         return {
           id: `${repoFullName}#${number}`,
           repo: repoFullName,
           number: parseInt(number),
           title: `PR #${number}`,
           url: `https://github.com/${repoFullName}/pull/${number}`,
-          state,
-          author: { login: author },
-          updatedAt: new Date().toISOString(),
+          state: 'OPEN',
+          author: { login: '' },
+          updatedAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
           repository: { nameWithOwner: repoFullName },
-          metadata: {
-            age: age.trim(),
-            reviewDecision: reviewDecision.trim(),
-            mergeable: mergeable?.trim() || ''
-          }
+          metadata: { age: '', reviewDecision: '', mergeable: '' }
         };
       }
       return null;
@@ -174,7 +148,7 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
   
   try {
     const { stdout } = await execAsync(
-      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt`,
+      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt,title,author,state,reviewDecision`,
       { timeout: 10000 } // 10 second timeout
     );
     const data = JSON.parse(stdout);
@@ -195,6 +169,8 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
           allUserReviews.map(r => `${r.state} (${r.submittedAt})`).join(', '));
       }
       
+      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision };
+
       if (userReviews.length > 0) {
         const latestReview = userReviews[0];
         console.log(`PR ${owner}/${repo}#${number}: Using review state: ${latestReview.state} from ${latestReview.submittedAt}`);
@@ -202,17 +178,19 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
           hasReviewed: true,
           state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
           submittedAt: latestReview.submittedAt,
-          updatedAt: data.updatedAt
+          updatedAt: data.updatedAt,
+          prMeta
         };
       } else if (allUserReviews.length > 0) {
         // All reviews were dismissed - treat as not reviewed
         console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username} were dismissed`);
-        result = { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true };
+        result = { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true, prMeta };
       } else {
-        result = { hasReviewed: false, updatedAt: data.updatedAt };
+        result = { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
       }
     } else {
-      result = { hasReviewed: false, updatedAt: data.updatedAt };
+      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision };
+      result = { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
     }
     
     // Cache successful result
@@ -276,9 +254,11 @@ app.get('/api/prs', async (req, res) => {
         try {
           const [owner, repo] = pr.repo.split('/');
           const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
-          // Update the PR's updatedAt with the actual value from GitHub
-          if (reviewStatus.updatedAt) {
-            pr.updatedAt = reviewStatus.updatedAt;
+          if (reviewStatus.updatedAt) pr.updatedAt = reviewStatus.updatedAt;
+          if (reviewStatus.prMeta) {
+            if (reviewStatus.prMeta.title) pr.title = reviewStatus.prMeta.title;
+            if (reviewStatus.prMeta.author) pr.author = reviewStatus.prMeta.author;
+            if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
           }
           return { ...pr, reviewStatus };
         } catch (error) {
