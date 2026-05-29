@@ -65,11 +65,8 @@ function toggleHidePR(prId, owner, repo, number) {
     delete hiddenPRs[prId];
     showToast(`Unhidden PR #${number}`, 'info', '', 2000);
   } else {
-    // Find the PR to get its updatedAt timestamp
-    const pr = allPRs.find(p => `${p.repo}#${p.number}` === prId);
     hiddenPRs[prId] = {
-      hiddenAt: new Date().toISOString(),
-      updatedAt: pr?.updatedAt || null
+      hiddenAt: new Date().toISOString()
     };
     showToast(`Hidden PR #${number}`, 'success', '', 2000);
   }
@@ -186,26 +183,6 @@ async function fetchPRs() {
       
       // Detect new PRs since last refresh
       const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
-      
-      // Check if any hidden PRs have been updated and should be unhidden
-      let unhiddenCount = 0;
-      for (const prId of Object.keys(hiddenPRs)) {
-        const pr = allPRs.find(p => `${p.repo}#${p.number}` === prId);
-        if (pr && hiddenPRs[prId].updatedAt) {
-          // Compare updatedAt timestamps
-          if (pr.updatedAt && pr.updatedAt !== hiddenPRs[prId].updatedAt) {
-            console.log(`PR ${prId} was updated: ${hiddenPRs[prId].updatedAt} -> ${pr.updatedAt}`);
-            delete hiddenPRs[prId];
-            pr.isNew = true; // Mark as new since it was updated
-            unhiddenCount++;
-          }
-        }
-      }
-      
-      if (unhiddenCount > 0) {
-        saveHiddenPRs(); // Save updated hidden list
-        showToast(`${unhiddenCount} hidden PR${unhiddenCount > 1 ? 's' : ''} updated and unhidden`, 'info', '', 4000);
-      }
       
       // Mark new PRs (PRs that weren't in the previous set)
       let newPRCount = 0;
