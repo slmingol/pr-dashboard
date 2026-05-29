@@ -518,6 +518,7 @@ function switchDiffView(view) {
     unifiedBtn.className = 'btn btn-small btn-muted';
     splitBtn.className = 'btn btn-small btn-primary';
   }
+  localStorage.setItem('diffView', view);
 }
 
 // View diff
@@ -553,6 +554,8 @@ async function viewDiff(owner, repo, number) {
         <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
         ${buttonsHtml}
       `);
+      const savedView = localStorage.getItem('diffView') || 'unified';
+      switchDiffView(savedView);
     } else {
       const errorMsg = data.error || 'Unknown error';
       if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
