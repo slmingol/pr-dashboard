@@ -1123,6 +1123,7 @@ function loadTheme() {
 }
 
 // Event listeners
+document.getElementById('keyboard-help-btn').addEventListener('click', showKeyboardHelp);
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
 document.getElementById('refresh-btn').addEventListener('click', fetchPRs);

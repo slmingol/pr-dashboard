@@ -1,235 +1,204 @@
 # PR Dashboard
 
-A containerized pull request dashboard that integrates with your [`ghreport`](https://github.com/slmingol/ghreport) CLI tool and GitHub CLI to provide a comprehensive view of all your PRs with review tracking and management features.
+A containerized pull request dashboard that integrates with [`ghreport`](https://github.com/slmingol/ghreport) and the GitHub CLI to provide a consolidated view of all monitored PRs with review tracking and management features.
 
 ## Features
 
-### 🎯 Core Features
-- **Consolidated PR View**: Display all PRs from `ghreport` output in a clean, organized interface
-- **Repository Grouping**: PRs automatically grouped by repository with sticky headers
-- **Review Status Tracking**: See at a glance which PRs you've already reviewed (✓ Reviewed badge)
-- **Hide/Unhide PRs**: Mark PRs as hidden to reduce clutter while keeping them accessible
-- **Search & Filter**: Filter by search term, PR state (Open/Closed/Merged), and hidden status
-- **Statistics Dashboard**: Real-time counts for Total, Visible, Hidden, and Filtered PRs
+### Core
 
-### 💬 Review Workflow
-- **Integrated Comment Modal**: Add comments and reviews with a styled textarea (no browser prompts)
-- **Approve/Reject from Diff**: Review buttons directly in the diff view modal
-- **Review Indicators**: 
-  - ✓ **Reviewed** (green) - You approved this PR
-  - ⚠️ **Changes Requested** (orange) - You requested changes
-  - 💬 **Commented** (blue) - You left comments
-- **Quick Actions**: Approve (✓) or Request Changes (✗) buttons on each PR card
+- **Consolidated PR view** -- all PRs from `ghreport` output, grouped by repository with sticky headers
+- **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
+- **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage
+- **Watch-only repos** -- mark repos as view-only to suppress review actions (useful for monitoring repos you don't participate in)
+- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), or hidden status
+- **Statistics bar** -- real-time counts for Total, Visible, Hidden, and Filtered PRs
 
-### 🛠️ PR Operations
-- View PR details, diffs, and metadata
+### Review workflow
+
+- Approve, request changes, or comment directly from the dashboard
+- Integrated comment modal (no browser prompts)
+- Review buttons in the diff view modal
+- PR list refreshes to reflect your new review status after submission
+
+### PR operations
+
+- View PR details and metadata
+- View diffs with syntax highlighting (unified and split modes, preference saved)
 - Checkout PR branches locally
-- Add comments and submit reviews
-- Approve or request changes with optional comments
-- Open PRs directly in GitHub
-- **Refresh Data**: Re-run ghreport to fetch latest PRs from all monitored repositories
-- **Clickable PR Numbers**: Direct links to GitHub PRs from PR numbers
+- Open any PR in GitHub
 
-### 🎨 UI/UX
-- **Dark/Light Mode**: Toggle between themes with 🌙/☀️ button (preference saved)
-- **Compact Layout**: Single-line horizontal PR cards for maximum density
-- **Toast Notifications**: Non-intrusive success/error messages
-- **Keyboard Shortcuts**: Cmd/Ctrl+Enter to submit, Escape to cancel
-- **Color-Coded Buttons**: Each action has a distinct color for easy identification
-  - 🔵 **Details** (Blue) - View PR information
-  - 🔷 **Diff** (Cyan) - Inspect code changes
-  - 🟢 **Checkout** (Green) - Check out branch
-  - 🟠 **Comment** (Orange) - Add comment
-  - ✅ **Approve** (Green) - Positive review
-  - ❌ **Reject** (Red) - Request changes
-- **Smart Title Display**: Hides generic "PR #NNN" titles (ghreport does not include PR titles; all titles are generic)
-- **Larger Buttons**: Improved hit targets and readability (13px font, 8px/14px padding)
+### Data refresh
+
+- **Refresh Data** -- re-runs `ghreport` inside the container to fetch the latest PRs from all monitored repositories (20-30 seconds for 100+ repos); streams progress via SSE
+- **Reload** -- reloads the PR list from the current `ghreport` output file (instant)
+
+### UI/UX
+
+- Dark/light mode with saved preference
+- Compact single-line PR cards for maximum density
+- Toast notifications for actions
+- Keyboard shortcuts for full mouse-free operation (see below)
+
+## Keyboard Shortcuts
+
+Press `?` or click the `⌨` button in the header to open the in-app shortcuts reference.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Select next / previous PR |
+| `d` | View diff |
+| `Enter` | View details |
+| `a` | Approve PR |
+| `x` | Request changes |
+| `c` | Comment on PR |
+| `h` | Hide / unhide PR |
+| `o` | Open PR in GitHub |
+| `r` | Reload PR list |
+| `R` | Refresh ghreport data |
+| `/` | Focus search box |
+| `?` | Show keyboard shortcuts |
+| `Esc` | Close modal |
+
+Action keys (`a`, `x`, `c`) are silently blocked for watch-only repos.
 
 ## Prerequisites
 
-- **Podman Desktop** or **Docker** installed
-- **GitHub CLI** (`gh`) installed and authenticated on host
-- GitHub personal access token (for container authentication)
-- **subscribedRepos** environment variable (optional, for monitoring specific repositories)
+- **Podman Desktop** or **Docker**
+- **GitHub CLI** (`gh`) installed and authenticated on the host
+- A GitHub personal access token
 
-**Note**: `ghreport` is automatically installed inside the container during build - no host installation required.
+`ghreport` is automatically installed inside the container during build -- no host installation required.
 
 ## Setup
 
-### 1. Create Environment File
-
-Create a `.env` file with your GitHub token:
+### 1. Create environment file
 
 ```bash
 echo "GH_TOKEN=$(gh auth token)" > .env
 ```
 
-**Optional**: Add subscribedRepos for monitoring specific repositories:
+### 2. Configure ghreport
+
+The container reads `~/.config/ghreport/config.yaml` for the `subscribedRepos` list. Mount it into the container (already configured in `docker-compose.yml`):
+
+```yaml
+volumes:
+  - ~/.config/ghreport:/root/.config/ghreport:ro
+```
+
+You can also set `subscribedRepos` directly in `.env`:
 
 ```bash
 echo 'subscribedRepos=org/repo1 org/repo2 org/repo3' >> .env
 ```
 
-**Important**: The container cannot access macOS keychain, so the token must be provided via environment variable. Both `GH_TOKEN` (for gh CLI) and `GITHUB_TOKEN` (for ghreport) are automatically set from the same token value.
-
-### 2. Configure ghreport Output Path
-
-Edit `docker-compose.yml` if your ghreport output is not at `~/ghreport-output/ghreport.txt`:
-
-```yaml
-volumes:
-  - ~/.config/gh:/root/.config/gh:ro
-  - ~/ghreport-output:/data:ro  # Update this path
-  - ~/.gitconfig:/root/.gitconfig:ro
-```
-
-### 3. Verify ghreport Format
-
-The dashboard expects ghreport output in this format:
-
-```
-https://github.com/owner/repo/pull/123 author: username Age: 8 days reviewDecision: ✅ mergeable: ✅
-```
-
-**Metadata fields**:
-- `author:` - PR author username
-- `Age:` - Days since PR opened
-- `reviewDecision:` - Review status (✅ approved, 🔍 review required)
-- `mergeable:` - Merge status (✅ mergeable, ❌ conflicts)
-
-### 4. Build and Start
+### 3. Build and start
 
 ```bash
-cd ~/dev/projects/pr-dashboard
+make up      # dev mode (live reload)
+make build   # production build
+```
+
+Or directly:
+
+```bash
 podman compose up -d --build
 ```
 
-Or with Docker:
-```bash
-docker compose up -d --build
+### 4. Open the dashboard
+
+[http://localhost:3000](http://localhost:3000)
+
+## Makefile targets
+
 ```
-
-### 5. Access Dashboard
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Usage
-
-### Main Interface
-
-- **Statistics Bar**: Shows Total PRs, Visible, Hidden, and Filtered counts
-- **Search**: Filter PRs by title, repository name, or PR number
-- **State Filter**: Show all PRs, or only Open/Closed/Merged
-- **Show Hidden**: Toggle to show/hide PRs you've marked as hidden
-- **Theme Toggle**: 🌙/☀️ button to switch between dark and light mode
-- **Refresh Data**: 🔄 button to re-run ghreport and fetch latest PRs (takes 20-30 seconds for 100+ repos)
-- **Reload**: ↻ button to reload PR list from existing ghreport.txt file (instant)
-
-### PR Actions
-
-Each PR card shows:
-- **PR Number**: Clickable link to GitHub PR (bold, primary color)
-- **Title**: Shown only if not generic (e.g., not "PR #123")
-- **Metadata**: Author, age, review status, mergeable status
-- **State Badge**: Current PR state (OPEN, APPROVED, REVIEW REQUIRED)
-- **Review Badge**: Your review status (✓ Reviewed, ⚠️ Changes Requested, 💬 Commented)
-- **Hidden Badge**: Shows when PR is marked as hidden
-
-**Action Buttons**:
-- **🙈/👁**: Hide or unhide this PR
-- **Details**: View full PR information
-- **Diff**: See code changes with syntax highlighting
-- **Checkout**: Check out PR branch locally
-- **Comment**: Add a comment to the PR
-- **✓**: Approve the PR
-- **✗**: Request changes
-- **Open →**: Open PR on GitHub
-
-### Review Workflow
-
-1. Click **Diff** to view changes
-2. Click **✓ Approve** or **✗ Request Changes** in the diff modal
-3. Add optional/required comment in the integrated modal
-4. Press `Cmd/Ctrl+Enter` to submit or `Escape` to cancel
-5. Both modals close automatically after submission
-6. PR list refreshes to show your new review status
-
-### Hide/Unhide PRs
-
-- Click **🙈** to hide a PR you don't want to see
-- Hidden PRs are removed from the main view
-- Check **Show Hidden** to see them again (dimmed with 50% opacity)
-- Click **👁** on a hidden PR to unhide it
-- Hidden status persists in browser localStorage
+make list      # show all targets
+make up        # start in dev mode
+make down      # stop container
+make restart   # restart running container
+make logs      # tail container logs
+make shell     # exec into container
+make build     # full rebuild (production)
+make clean     # remove container and image
+```
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
-Set in `.env` file or `docker-compose.yml`:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GH_TOKEN` | Yes | -- | GitHub personal access token |
+| `GITHUB_TOKEN` | Auto | same as GH_TOKEN | For ghreport authentication |
+| `subscribedRepos` | No | from config.yaml | Space-separated repos to monitor |
+| `NODE_ENV` | No | `production` | Node environment |
+| `PORT` | No | `3000` | Server port |
+| `GHREPORT_OUTPUT` | No | `/data/ghreport.txt` | Path to ghreport output inside container |
 
-- `GH_TOKEN` - **Required**: GitHub personal access token (for gh CLI)
-- `GITHUB_TOKEN` - **Auto-set**: Same as GH_TOKEN (for ghreport authentication)
-- `subscribedRepos` - **Optional**: Space-separated list of repos to monitor (e.g., "org/repo1 org/repo2"). Passed through to `ghreport` inside the container — has no effect in local dev mode.
-- `NODE_ENV` - Node environment (default: `production`)
-- `PORT` - Server port (default: `3000`)
-- `GHREPORT_OUTPUT` - Path to ghreport file inside container (default: `/data/ghreport.txt`)
-
-### Volume Mounts
-
-Configured in `docker-compose.yml`:
+### Volume mounts (docker-compose.yml)
 
 ```yaml
 volumes:
-  - ~/.config/gh:/root/.config/gh:ro      # GitHub CLI config (read-only)
-  - ~/ghreport-output:/data:ro            # ghreport output directory (read-only)
-  - ~/.gitconfig:/root/.gitconfig:ro      # Git config for checkout (read-only)
+  - ~/.config/gh:/root/.config/gh:ro          # gh CLI auth
+  - ~/.config/ghreport:/root/.config/ghreport:ro  # ghreport config
+  - ~/ghreport-output:/data                   # ghreport output directory
+  - ~/.gitconfig:/root/.gitconfig:ro          # git config for checkout
 ```
 
-### Customizing the Parser
+### Browser storage (localStorage)
 
-If your ghreport format differs, edit the `loadPRsFromGhReport()` function in `server.js` to match your output pattern.
+| Key | Description |
+|-----|-------------|
+| `theme` | `dark` or `light` |
+| `hiddenPRs` | Array of `"owner/repo#number"` strings |
+| `watchOnlyRepos` | Object keyed by `"owner/repo"` |
+| `diffView` | `unified` or `split` |
 
 ## Architecture
 
-### Container Stack
-- **Base Image**: `node:18-alpine`
-- **Additional Tools**: `github-cli`, `git`, `go` (for ghreport build)
-- **ghreport**: Automatically installed via `go install github.com/slmingol/ghreport@latest` ([source](https://github.com/slmingol/ghreport))
-- **Port**: 3000
-- **Health Check**: Automatic monitoring with 30s interval
+### Stack
 
-### Technology
+- **Base image**: `node:18-alpine`
+- **Additional tools**: `github-cli`, `git`, `go` (for ghreport build)
+- **ghreport**: Installed via `go install github.com/slmingol/ghreport@latest`
 - **Backend**: Node.js 18 + Express 4.18
-- **Frontend**: Vanilla JavaScript (no build tools required)
-- **Styling**: CSS with CSS variables for theming
-- **Data Sources**: 
-  - ghreport CLI output (primary)
-  - GitHub CLI (`gh`) for API operations
+- **Frontend**: Vanilla JavaScript, no build step
+- **Port**: 3000
 
-### File Structure
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/prs` | All PRs with review status |
+| GET | `/api/user` | Current authenticated GitHub user |
+| GET | `/api/pr/:owner/:repo/:number` | PR details |
+| GET | `/api/pr/:owner/:repo/:number/diff` | PR diff |
+| POST | `/api/pr/:owner/:repo/:number/checkout` | Checkout branch locally |
+| POST | `/api/pr/:owner/:repo/:number/comment` | Add comment |
+| POST | `/api/pr/:owner/:repo/:number/review` | Submit review |
+| GET | `/api/refresh-ghreport-stream` | Re-run ghreport with SSE progress |
+| GET | `/api/health` | Health check |
+
+### File structure
+
 ```
 pr-dashboard/
 ├── public/
-│   ├── index.html        # Main HTML page
-│   ├── app.js            # Frontend JavaScript (UI logic)
-│   └── style.css         # Theming and layout styles
-├── scripts/
-│   ├── start.sh          # Build and start container
-│   └── stop.sh           # Stop container
-├── examples/
-│   └── ghreport-sample.txt  # Sample ghreport output format
-├── server.js              # Express backend with gh CLI integration
-├── docker-compose.yml    # Container orchestration
-├── Dockerfile            # Container build config
-├── package.json          # Node.js dependencies
-├── .env.example          # Environment variable template
-└── README.md             # This file
+│   ├── index.html       # Main HTML
+│   ├── app.js           # Frontend logic
+│   └── style.css        # Theming and layout
+├── server.js            # Express backend
+├── docker-compose.yml   # Container orchestration
+├── docker-compose.override.yml  # Dev overrides (live reload)
+├── Dockerfile           # Container build
+├── Makefile             # Build targets
+├── package.json         # Node.js dependencies
+└── .env.example         # Environment template
 ```
 
 ## Development
 
-### Local Development (without container)
+### Local (without container)
 
 ```bash
 npm install
@@ -238,123 +207,30 @@ export GHREPORT_OUTPUT=/path/to/ghreport.txt
 node server.js
 ```
 
-Open http://localhost:3000
+### Container dev mode
 
-### Making Changes
-
-1. Edit files in `public/` directory or `server.js`
-2. Rebuild and restart:
-   ```bash
-   podman compose up -d --build
-   ```
-3. Refresh browser to see changes
-
-### API Endpoints
-
-- `GET /api/prs` - Fetch all PRs with review status for current user
-- `GET /api/user` - Get current authenticated GitHub user
-- `GET /api/pr/:owner/:repo/:number` - Get PR details
-- `GET /api/pr/:owner/:repo/:number/diff` - Get PR diff
-- `POST /api/pr/:owner/:repo/:number/checkout` - Checkout PR locally
-- `POST /api/pr/:owner/:repo/:number/comment` - Add comment
-- `POST /api/pr/:owner/:repo/:number/review` - Submit review (approve/request-changes/comment)
-- `GET /api/refresh-ghreport-stream` - Re-run ghreport with SSE progress stream (used by UI)
-- `POST /api/refresh-ghreport` - Re-run ghreport (legacy, no progress stream)
-- `GET /api/health` - Health check
+`make up` uses `docker-compose.override.yml` to mount `public/` and `server.js` as live volumes -- source changes are reflected immediately without rebuilding.
 
 ## Troubleshooting
 
-### Authentication Issues
-
-**Symptom**: PRs not loading, or "authentication failed" errors
-
-**Solutions**:
-- Verify `.env` file contains `GH_TOKEN=<your-token>`
-- Regenerate token: `gh auth token` and update `.env`
+**PRs not loading**
+- Verify `ghreport.txt` exists at the mounted path
 - Check container logs: `podman logs pr-dashboard`
-- Ensure `~/.config/gh` is mounted correctly
+- Confirm `GH_TOKEN` is set and valid
 
-### PRs Not Loading
+**Review status not showing**
+- Open browser console (F12) and look for: `Current authenticated user: yourusername`
+- Check for per-PR review log lines
+- 404/403 errors for private/deleted repos are silently ignored
 
-**Symptom**: "No pull requests found" or empty list
+**Missing repos in the dashboard**
+- Ensure `~/.config/ghreport/config.yaml` is mounted and contains the repo under `subscribedRepos`
+- Restart container after config changes: `make restart`
+- Container logs will confirm: `ghreport: using N repos from /root/.config/ghreport/config.yaml`
 
-**Solutions**:
-- Verify `ghreport.txt` exists at mounted path
-- Check file format matches expected pattern
-- Run `ghreport` command manually to regenerate output
-- Check container logs for parsing errors: `podman logs pr-dashboard`
-
-### Review Status Not Showing
-
-**Symptom**: "✓ Reviewed" badge not appearing for PRs you reviewed
-
-**Solutions**:
-- Open browser console (F12) to see debug logs
-- Look for: `"Current authenticated user: yourusername"`
-- Check for: `"PR owner/repo#123: User yourusername review state: APPROVED"`
-- Verify you have permission to access the PR repository
-- 404/403 errors are silently ignored (deleted/private PRs)
-
-### Hidden PRs Not Visible
-
-**Symptom**: Can't see hidden PRs when "Show Hidden" is checked
-
-**Solutions**:
-- Hidden PRs should appear dimmed (50% opacity) when checkbox is checked
-- Check browser console for JavaScript errors
-- Clear browser localStorage: `localStorage.clear()` in console
-- Refresh page and try hiding/showing again
-
-### Container Issues
-
-**Symptom**: Container won't start or crashes
-
-**Solutions**:
-- Check container status: `podman ps -a`
-- View recent logs: `podman logs pr-dashboard --tail 50`
-- Restart container: `podman compose restart`
-- Rebuild from scratch:
-  ```bash
-  podman compose down
-  podman compose up -d --build
-  ```
-
-### Diff Modal Not Closing
-
-**Symptom**: Comment modal or diff modal stays open after review
-
-**Solutions**:
-- This was fixed in recent versions
-- Rebuild container to get latest code
-- Both modals should close automatically after successful review submission
-
-## Data Persistence
-
-### Browser Storage
-- **Theme Preference**: Saved in `localStorage` as `theme` (dark/light)
-- **Hidden PRs**: Saved in `localStorage` as `hiddenPRs` (array of "repo#number")
-
-### Container Data
-- No persistent data stored in container
-- All PR data fetched from ghreport file on each load
-- Review status fetched from GitHub API in real-time
-
-## Performance
-
-- **Parallel Review Fetching**: All PR review statuses fetched concurrently
-- **Error Resilience**: Individual PR failures don't break entire list
-- **Server-Side Review Cache**: Review statuses cached in-memory for 5 minutes; stale cache used as fallback on API errors
-- **Browser Storage**: Theme and hidden PR preferences cached in localStorage
-
-## Contributing
-
-Contributions welcome! Please feel free to submit issues or pull requests.
-
-## Security Notes
-
-- The dashboard uses read-only mounts for sensitive credentials
-- No credentials are stored in the container
-- All git/gh operations use your host authentication
+**Container won't start**
+- `podman ps -a` and `podman logs pr-dashboard --tail 50`
+- `make clean && make build` to rebuild from scratch
 
 ## License
 
