@@ -1,6 +1,7 @@
 let allPRs = [];
 let filteredPRs = [];
 let hiddenPRs = {};
+let watchOnlyRepos = {};
 let renderLimit = 25;
 
 function parseAgeDays(ageStr) {
@@ -57,6 +58,30 @@ function loadHiddenPRs() {
 function saveHiddenPRs() {
   localStorage.setItem('hiddenPRs', JSON.stringify(hiddenPRs));
   updateHiddenCount();
+}
+
+// Watch-only repos: visible but review actions disabled
+function loadWatchOnlyRepos() {
+  const stored = localStorage.getItem('watchOnlyRepos');
+  if (stored) {
+    try { watchOnlyRepos = JSON.parse(stored); } catch (e) { watchOnlyRepos = {}; }
+  }
+}
+
+function saveWatchOnlyRepos() {
+  localStorage.setItem('watchOnlyRepos', JSON.stringify(watchOnlyRepos));
+}
+
+function toggleWatchOnlyRepo(repo) {
+  if (watchOnlyRepos[repo]) {
+    delete watchOnlyRepos[repo];
+    showToast(`${repo} removed from watch-only`, 'info', '', 2000);
+  } else {
+    watchOnlyRepos[repo] = { addedAt: new Date().toISOString() };
+    showToast(`${repo} set to watch-only — review actions disabled`, 'info', '', 2500);
+  }
+  saveWatchOnlyRepos();
+  filterAndRenderPRs();
 }
 
 // Toggle PR hidden state
@@ -308,11 +333,16 @@ function renderPRs(prs, showHidden = false) {
     const countLabel = prsToRender.length < repoPRs.length
       ? `${prsToRender.length}/${repoPRs.length} PRs`
       : `${repoPRs.length} PR${repoPRs.length !== 1 ? 's' : ''}`;
+    const isWatchOnly = watchOnlyRepos.hasOwnProperty(repo);
     html += `
       <div class="repo-group">
-        <div class="repo-header">
+        <div class="repo-header${isWatchOnly ? ' repo-watch-only' : ''}">
           <h2 class="repo-name">📦 ${repo}</h2>
           <span class="repo-count">${countLabel}</span>
+          ${isWatchOnly ? '<span class="state-badge state-watch">WATCH</span>' : ''}
+          <button class="btn btn-small ${isWatchOnly ? 'btn-info' : 'btn-muted'}" onclick="toggleWatchOnlyRepo('${repo}')" title="${isWatchOnly ? 'Remove watch-only — re-enable review actions' : 'Set as watch-only — disable review actions for this repo'}">
+            ${isWatchOnly ? '👁 Watching' : '👁'}
+          </button>
         </div>
         <div class="repo-prs">
     `;
@@ -382,11 +412,13 @@ function renderPRs(prs, showHidden = false) {
                 ${isHidden ? '👁' : '🙈'}
               </button>
               <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')" title="View PR description and details">Details</button>
-              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')" title="View code changes and review">Diff</button>
+              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')" title="View code changes">Diff</button>
+              ${!isWatchOnly ? `
               <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')" title="Checkout this PR branch locally">Checkout</button>
               <button class="btn btn-small btn-warning" onclick="addComment('${owner}', '${repoName}', '${number}')" title="Add a comment to this PR">Comment</button>
               <button class="btn btn-small btn-success" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'approve')" title="Approve this PR">✓</button>
               <button class="btn btn-small btn-danger" onclick="reviewPR('${owner}', '${repoName}', '${number}', 'request-changes')" title="Request changes on this PR">✗</button>
+              ` : ''}
               <a href="${pr.url}" target="_blank" class="btn btn-small btn-muted" title="Open PR in GitHub">Open →</a>
             </div>
           </div>
@@ -537,7 +569,8 @@ async function viewDiff(owner, repo, number) {
 
       const splitHtml = renderSideBySideHtml(buildSideBySideDiff(data.diff));
 
-      const buttonsHtml = `<div class="diff-actions">
+      const isWatchOnly = watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
+      const buttonsHtml = isWatchOnly ? '' : `<div class="diff-actions">
         <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
         <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
         <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>
@@ -1039,5 +1072,6 @@ async function loadVersion() {
 // Initial load
 loadTheme();
 loadHiddenPRs();
+loadWatchOnlyRepos();
 fetchPRs();
 loadVersion();

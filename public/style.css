@@ -378,6 +378,7 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 0.875rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -387,6 +388,10 @@ h1 {
   top: 0;
   z-index: 10;
   backdrop-filter: blur(10px);
+}
+
+.repo-header.repo-watch-only {
+  border-left: 3px solid var(--info);
 }
 
 .repo-name {
@@ -552,6 +557,12 @@ h1 {
 .state-muted {
   background: var(--text-muted);
   color: white;
+}
+
+.state-watch {
+  background: rgba(124, 179, 224, 0.18);
+  color: var(--info);
+  border: 1px solid rgba(124, 179, 224, 0.35);
 }
 
 .state-stale {
