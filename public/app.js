@@ -279,7 +279,7 @@ function filterAndRenderPRs() {
   const stateFilter = document.getElementById('state-filter').value;
   const showHidden = document.getElementById('show-hidden').checked;
   
-  renderLimit = 25;
+  renderLimit = 100;
   filteredPRs = allPRs.filter(pr => {
     const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) || 
                          pr.repo?.toLowerCase().includes(searchTerm) ||
@@ -434,7 +434,7 @@ function renderPRs(prs, showHidden = false) {
 
   const remaining = prs.length - renderedCount;
   if (remaining > 0) {
-    const nextBatch = Math.min(25, remaining);
+    const nextBatch = Math.min(50, remaining);
     html += `<div class="show-more-container">
       <button class="btn btn-muted" onclick="showMorePRs()">Show ${nextBatch} more (${remaining} remaining)</button>
     </div>`;
@@ -444,7 +444,7 @@ function renderPRs(prs, showHidden = false) {
 }
 
 function showMorePRs() {
-  renderLimit += 25;
+  renderLimit += 50;
   renderPRs(filteredPRs, document.getElementById('show-hidden').checked);
 }
 

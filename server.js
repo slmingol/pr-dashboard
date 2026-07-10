@@ -15,57 +15,70 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 app.use(express.json());
 app.use(express.static('public'));
 
+// Parse a single ghreport output line — handles two formats:
+//   old: https://github.com/owner/repo/pull/N: createdAt 2024-01-01T00:00:00Z
+//   new: https://github.com/owner/repo/pull/N author: login Age: N days reviewDecision: emoji mergeable: emoji
+function parseGhReportLine(line) {
+  const match = line.match(
+    /https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(\S+(?:\s+\S+)?))?(?:\s+author:\s+(\S+))?(?:\s+Age:\s+(\d+)\s+(days?|hours?))?/i
+  );
+  if (!match) return null;
+
+  const [, owner, repo, number, createdAt, authorLogin, ageAmount, ageUnit] = match;
+
+  let updatedAt;
+  if (createdAt) {
+    updatedAt = new Date(createdAt).toISOString();
+  } else if (ageAmount) {
+    const ms = ageUnit.toLowerCase().startsWith('day')
+      ? parseInt(ageAmount) * 86400000
+      : parseInt(ageAmount) * 3600000;
+    updatedAt = new Date(Date.now() - ms).toISOString();
+  } else {
+    updatedAt = new Date().toISOString();
+  }
+
+  const repoFullName = `${owner}/${repo}`;
+  return {
+    id: `${repoFullName}#${number}`,
+    repo: repoFullName,
+    number: parseInt(number),
+    title: `PR #${number}`,
+    url: `https://github.com/${repoFullName}/pull/${number}`,
+    state: 'OPEN',
+    author: { login: authorLogin || '' },
+    updatedAt,
+    repository: { nameWithOwner: repoFullName },
+    metadata: { age: '', reviewDecision: '', mergeable: '' }
+  };
+}
+
 // Parse ghreport output
 async function loadPRsFromGhReport() {
   try {
     const ghreportPath = process.env.GHREPORT_OUTPUT || '/data/ghreport.txt';
     const content = await fs.readFile(ghreportPath, 'utf-8');
-    
+
     // Handle line continuations (lines starting with space are continuations)
     const rawLines = content.split('\n');
     const joinedLines = [];
     let currentLine = '';
-    
+
     for (const line of rawLines) {
       if (line.startsWith(' ') && currentLine) {
-        // Continuation line - append to current
         currentLine += line;
       } else {
-        // New line - save previous and start new
         if (currentLine.trim()) {
           joinedLines.push(currentLine.trim());
         }
         currentLine = line;
       }
     }
-    // Don't forget the last line
     if (currentLine.trim()) {
       joinedLines.push(currentLine.trim());
     }
-    
-    // Parse ghreport format: https://github.com/owner/repo/pull/NUMBER: createdAt DATETIME
-    const prs = joinedLines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(.+))?/);
-      if (match) {
-        const [, owner, repo, number, createdAt] = match;
-        const repoFullName = `${owner}/${repo}`;
-        return {
-          id: `${repoFullName}#${number}`,
-          repo: repoFullName,
-          number: parseInt(number),
-          title: `PR #${number}`,
-          url: `https://github.com/${repoFullName}/pull/${number}`,
-          state: 'OPEN',
-          author: { login: '' },
-          updatedAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
-          repository: { nameWithOwner: repoFullName },
-          metadata: { age: '', reviewDecision: '', mergeable: '' }
-        };
-      }
-      return null;
-    }).filter(Boolean);
 
-    return prs;
+    return joinedLines.map(parseGhReportLine).filter(Boolean);
   } catch (error) {
     console.error('Error reading ghreport:', error.message);
     return [];
@@ -75,13 +88,13 @@ async function loadPRsFromGhReport() {
 // Fallback: try to run ghreport command directly if file doesn't exist
 async function runGhReportCommand() {
   try {
-    const { stdout } = await execAsync('ghreport');
-    
-    // Handle line continuations (lines starting with space are continuations)
+    const env = await getGhreportEnv();
+    const { stdout } = await execAsync('ghreport', { env });
+
     const rawLines = stdout.split('\n');
     const joinedLines = [];
     let currentLine = '';
-    
+
     for (const line of rawLines) {
       if (line.startsWith(' ') && currentLine) {
         currentLine += line;
@@ -95,29 +108,8 @@ async function runGhReportCommand() {
     if (currentLine.trim()) {
       joinedLines.push(currentLine.trim());
     }
-    
-    // Parse ghreport format: https://github.com/owner/repo/pull/NUMBER: createdAt DATETIME
-    const prs = joinedLines.map((line) => {
-      const match = line.match(/https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(.+))?/);
-      if (match) {
-        const [, owner, repo, number, createdAt] = match;
-        const repoFullName = `${owner}/${repo}`;
-        return {
-          id: `${repoFullName}#${number}`,
-          repo: repoFullName,
-          number: parseInt(number),
-          title: `PR #${number}`,
-          url: `https://github.com/${repoFullName}/pull/${number}`,
-          state: 'OPEN',
-          author: { login: '' },
-          updatedAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
-          repository: { nameWithOwner: repoFullName },
-          metadata: { age: '', reviewDecision: '', mergeable: '' }
-        };
-      }
-      return null;
-    }).filter(Boolean);
-    return prs;
+
+    return joinedLines.map(parseGhReportLine).filter(Boolean);
   } catch (error) {
     console.error('Error running ghreport command:', error.message);
     return [];
@@ -133,6 +125,31 @@ async function getCurrentUser() {
     console.error('Error getting current user:', error.message);
     return null;
   }
+}
+
+// Read subscribedRepos from ghreport config.yaml, falling back to the env var.
+// The container binary reads subscribedRepos from env; the config file is the
+// canonical list (mounted from host), so prefer it when present.
+async function getGhreportEnv() {
+  const configPath = process.env.GHREPORT_CONFIG || '/root/.config/ghreport/config.yaml';
+  try {
+    const content = await fs.readFile(configPath, 'utf-8');
+    const repos = [];
+    let inSection = false;
+    for (const line of content.split('\n')) {
+      if (/^subscribedRepos:/.test(line)) { inSection = true; continue; }
+      if (inSection) {
+        const m = line.match(/^\s+-\s+(\S+)/);
+        if (m) { repos.push(m[1]); continue; }
+        if (/^\S/.test(line)) break; // next top-level key
+      }
+    }
+    if (repos.length > 0) {
+      console.log(`ghreport: using ${repos.length} repos from ${configPath}`);
+      return { ...process.env, subscribedRepos: repos.join(' ') };
+    }
+  } catch (_) { /* config not present, fall through */ }
+  return process.env;
 }
 
 // Check if current user has reviewed a PR and get updatedAt (with caching and retry)
@@ -389,7 +406,8 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
     sendProgress(0, 'Starting ghreport...');
     sendProgress(10, 'Querying GitHub API...');
 
-    const ghreport = spawn('ghreport');
+    const ghreportEnv = await getGhreportEnv();
+    const ghreport = spawn('ghreport', [], { env: ghreportEnv });
     ghreportProcess = ghreport;
 
     let stdout = '';
