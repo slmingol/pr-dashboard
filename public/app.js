@@ -3,6 +3,7 @@ let filteredPRs = [];
 let hiddenPRs = {};
 let watchOnlyRepos = {};
 let renderLimit = 25;
+let selectedPRId = null;
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -441,6 +442,7 @@ function renderPRs(prs, showHidden = false) {
   }
 
   prList.innerHTML = html;
+  reapplySelection();
 }
 
 function showMorePRs() {
@@ -988,6 +990,108 @@ async function refreshGhReport() {
   }
 }
 
+// ─── Keyboard navigation ──────────────────────────────────────────────────────
+
+function selectedCard() {
+  return document.querySelector('#pr-list .pr-card.pr-selected');
+}
+
+function reapplySelection() {
+  if (!selectedPRId) return;
+  const [ownerRepo, number] = selectedPRId.split('#');
+  const [owner, repo] = ownerRepo.split('/');
+  const card = document.querySelector(
+    `#pr-list .pr-card[data-owner="${owner}"][data-repo="${repo}"][data-number="${number}"]`
+  );
+  if (card) card.classList.add('pr-selected');
+  else selectedPRId = null;
+}
+
+function navigateSelection(delta) {
+  const cards = Array.from(document.querySelectorAll('#pr-list .pr-card'));
+  if (cards.length === 0) return;
+  const current = selectedCard();
+  const currentIndex = current ? cards.indexOf(current) : -1;
+  const newIndex = Math.max(0, Math.min(cards.length - 1, currentIndex + delta));
+  cards.forEach(c => c.classList.remove('pr-selected'));
+  const next = cards[newIndex];
+  next.classList.add('pr-selected');
+  next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  selectedPRId = `${next.dataset.owner}/${next.dataset.repo}#${next.dataset.number}`;
+}
+
+function diffSelected() {
+  const c = selectedCard();
+  if (c) viewDiff(c.dataset.owner, c.dataset.repo, c.dataset.number);
+}
+
+function detailsSelected() {
+  const c = selectedCard();
+  if (c) viewDetails(c.dataset.owner, c.dataset.repo, c.dataset.number);
+}
+
+function approveSelected() {
+  const c = selectedCard();
+  if (!c || watchOnlyRepos[`${c.dataset.owner}/${c.dataset.repo}`]) return;
+  reviewPR(c.dataset.owner, c.dataset.repo, c.dataset.number, 'approve');
+}
+
+function requestChangesSelected() {
+  const c = selectedCard();
+  if (!c || watchOnlyRepos[`${c.dataset.owner}/${c.dataset.repo}`]) return;
+  reviewPR(c.dataset.owner, c.dataset.repo, c.dataset.number, 'request-changes');
+}
+
+function commentSelected() {
+  const c = selectedCard();
+  if (!c || watchOnlyRepos[`${c.dataset.owner}/${c.dataset.repo}`]) return;
+  addComment(c.dataset.owner, c.dataset.repo, c.dataset.number);
+}
+
+function hideSelected() {
+  const c = selectedCard();
+  if (c) toggleHidePR(
+    `${c.dataset.owner}/${c.dataset.repo}#${c.dataset.number}`,
+    c.dataset.owner, c.dataset.repo, c.dataset.number
+  );
+}
+
+function openSelected() {
+  const c = selectedCard();
+  if (c) window.open(`https://github.com/${c.dataset.owner}/${c.dataset.repo}/pull/${c.dataset.number}`, '_blank');
+}
+
+function showKeyboardHelp() {
+  const bindings = [
+    ['j / k',  'Select next / previous PR'],
+    ['d',      'View diff'],
+    ['Enter',  'View details'],
+    ['a',      'Approve PR'],
+    ['x',      'Request changes'],
+    ['c',      'Comment on PR'],
+    ['h',      'Hide / unhide PR'],
+    ['o',      'Open PR in GitHub'],
+    ['r',      'Reload PR list'],
+    ['R',      'Refresh ghreport data'],
+    ['/',      'Focus search'],
+    ['?',      'Show this help'],
+    ['Esc',    'Close modal'],
+  ];
+  showModal(`
+    <h2>Keyboard Shortcuts</h2>
+    <table style="width:100%;border-collapse:collapse;margin-top:1rem;">
+      ${bindings.map(([key, desc]) => `
+        <tr>
+          <td style="padding:0.35rem 2rem 0.35rem 0;white-space:nowrap"><kbd>${key}</kbd></td>
+          <td style="padding:0.35rem 0;color:var(--text-muted);font-size:0.875rem">${desc}</td>
+        </tr>
+      `).join('')}
+    </table>
+  `);
+}
+
+// ─── Theme toggle ─────────────────────────────────────────────────────────────
+
 // Theme toggle functionality
 function toggleTheme() {
   const root = document.documentElement;
@@ -1048,16 +1152,33 @@ document.getElementById('comment-input').addEventListener('keydown', (e) => {
 
 // Global keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+  const modal = document.getElementById('modal');
+  const commentModal = document.getElementById('comment-modal');
+  const modalOpen = !modal.classList.contains('hidden');
+  const commentModalOpen = !commentModal.classList.contains('hidden');
+
   if (e.key === 'Escape') {
-    const modal = document.getElementById('modal');
-    const commentModal = document.getElementById('comment-modal');
-    
-    // Close modals in priority order (comment modal first if open)
-    if (!commentModal.classList.contains('hidden')) {
-      cancelCommentModal();
-    } else if (!modal.classList.contains('hidden')) {
-      hideModal();
-    }
+    if (commentModalOpen) cancelCommentModal();
+    else if (modalOpen) hideModal();
+    return;
+  }
+
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || modalOpen || commentModalOpen) return;
+
+  switch (e.key) {
+    case 'j': navigateSelection(1); break;
+    case 'k': navigateSelection(-1); break;
+    case 'd': diffSelected(); break;
+    case 'Enter': detailsSelected(); break;
+    case 'a': approveSelected(); break;
+    case 'x': requestChangesSelected(); break;
+    case 'c': commentSelected(); break;
+    case 'h': hideSelected(); break;
+    case 'o': openSelected(); break;
+    case 'r': fetchPRs(); break;
+    case 'R': refreshGhReport(); break;
+    case '/': e.preventDefault(); document.getElementById('search').focus(); break;
+    case '?': showKeyboardHelp(); break;
   }
 });
 

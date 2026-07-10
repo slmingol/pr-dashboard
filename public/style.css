@@ -565,6 +565,24 @@ h1 {
   border: 1px solid rgba(124, 179, 224, 0.35);
 }
 
+.pr-card.pr-selected {
+  border-left: 4px solid var(--primary);
+  background: linear-gradient(90deg, rgba(124, 179, 224, 0.08) 0%, var(--surface) 15%);
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 0.75rem;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  background: var(--bg-deeper);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .state-stale {
   background: var(--text-muted);
   color: white;
