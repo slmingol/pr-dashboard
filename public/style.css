@@ -583,6 +583,13 @@ kbd {
   white-space: nowrap;
 }
 
+.state-draft {
+  background: rgba(150, 150, 150, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(150, 150, 150, 0.3);
+  font-style: italic;
+}
+
 .state-stale {
   background: var(--text-muted);
   color: white;

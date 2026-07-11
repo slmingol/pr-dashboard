@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -160,12 +160,12 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
   const cached = reviewCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
     console.log(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
-    return cached.status;
+    return { ...cached.status, cachedAt: cached.timestamp };
   }
   
   try {
     const { stdout } = await execAsync(
-      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt,title,author,state,reviewDecision`,
+      `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt,title,author,state,reviewDecision,isDraft`,
       { timeout: 10000 } // 10 second timeout
     );
     const data = JSON.parse(stdout);
@@ -186,7 +186,7 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
           allUserReviews.map(r => `${r.state} (${r.submittedAt})`).join(', '));
       }
       
-      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision };
+      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision, isDraft: data.isDraft || false };
 
       if (userReviews.length > 0) {
         const latestReview = userReviews[0];
@@ -206,13 +206,14 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
         result = { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
       }
     } else {
-      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision };
+      const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision, isDraft: data.isDraft || false };
       result = { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
     }
     
     // Cache successful result
-    reviewCache.set(cacheKey, { status: result, timestamp: Date.now() });
-    return result;
+    const now = Date.now();
+    reviewCache.set(cacheKey, { status: result, timestamp: now });
+    return { ...result, cachedAt: now };
     
   } catch (error) {
     // Handle different error types
@@ -234,7 +235,7 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
     // If we have cached data (even if expired), use it as fallback
     if (cached) {
       console.warn(`PR ${cacheKey}: Using stale cache due to error (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
-      return { ...cached.status, stale: true };
+      return { ...cached.status, stale: true, cachedAt: cached.timestamp };
     }
     
     console.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
@@ -276,6 +277,7 @@ app.get('/api/prs', async (req, res) => {
             if (reviewStatus.prMeta.title) pr.title = reviewStatus.prMeta.title;
             if (reviewStatus.prMeta.author) pr.author = reviewStatus.prMeta.author;
             if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
+          if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
           }
           return { ...pr, reviewStatus };
         } catch (error) {

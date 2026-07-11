@@ -47,6 +47,10 @@
         <span class="stat-label">Filtered</span>
         <span class="stat-value stat-primary" id="stat-filtered">0</span>
       </div>
+      <div class="stat-item">
+        <span class="stat-label">Drafts</span>
+        <span class="stat-value stat-muted" id="stat-drafts">0</span>
+      </div>
     </div>
 
     <div id="filters" class="filters">
@@ -61,6 +65,11 @@
         <input type="checkbox" id="show-hidden" />
         Show Hidden (<span id="hidden-count">0</span>)
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-drafts" checked />
+        Show Drafts (<span id="draft-count">0</span>)
+      </label>
+      <button id="reset-filters-btn" class="btn btn-muted btn-small" title="Reset all filters to defaults">Reset</button>
     </div>
 
     <div id="pr-list" class="pr-list"></div>

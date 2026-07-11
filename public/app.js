@@ -85,6 +85,34 @@ function toggleWatchOnlyRepo(repo) {
   filterAndRenderPRs();
 }
 
+// Filter preference persistence
+function saveFilterPrefs() {
+  localStorage.setItem('filterSearch', document.getElementById('search').value);
+  localStorage.setItem('filterState', document.getElementById('state-filter').value);
+  localStorage.setItem('filterShowHidden', document.getElementById('show-hidden').checked);
+  localStorage.setItem('filterShowDrafts', document.getElementById('show-drafts').checked);
+}
+
+function loadFilterPrefs() {
+  const search = localStorage.getItem('filterSearch');
+  const state = localStorage.getItem('filterState');
+  const showHidden = localStorage.getItem('filterShowHidden');
+  const showDrafts = localStorage.getItem('filterShowDrafts');
+  if (search !== null) document.getElementById('search').value = search;
+  if (state !== null) document.getElementById('state-filter').value = state;
+  if (showHidden !== null) document.getElementById('show-hidden').checked = showHidden === 'true';
+  document.getElementById('show-drafts').checked = showDrafts === null ? true : showDrafts === 'true';
+}
+
+function resetFilters() {
+  document.getElementById('search').value = '';
+  document.getElementById('state-filter').value = 'all';
+  document.getElementById('show-hidden').checked = false;
+  document.getElementById('show-drafts').checked = true;
+  ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts'].forEach(k => localStorage.removeItem(k));
+  filterAndRenderPRs();
+}
+
 // Toggle PR hidden state
 function toggleHidePR(prId, owner, repo, number) {
   if (hiddenPRs[prId]) {
@@ -124,10 +152,14 @@ function updateStats() {
     return matchesSearch && matchesState;
   }).length;
   
+  const draftCount = allPRs.filter(pr => pr.isDraft).length;
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-visible').textContent = displayed;
   document.getElementById('stat-hidden').textContent = hidden;
   document.getElementById('stat-filtered').textContent = matchingFilters;
+  document.getElementById('stat-drafts').textContent = draftCount;
+  const draftCountEl = document.getElementById('draft-count');
+  if (draftCountEl) draftCountEl.textContent = draftCount;
 }
 
 // Toast notification system
@@ -279,22 +311,22 @@ function filterAndRenderPRs() {
   const searchTerm = document.getElementById('search').value.toLowerCase();
   const stateFilter = document.getElementById('state-filter').value;
   const showHidden = document.getElementById('show-hidden').checked;
-  
+  const showDrafts = document.getElementById('show-drafts').checked;
+
+  saveFilterPrefs();
   renderLimit = 100;
   filteredPRs = allPRs.filter(pr => {
-    const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) || 
+    const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) ||
                          pr.repo?.toLowerCase().includes(searchTerm) ||
                          pr.number?.toString().includes(searchTerm);
-    
     const matchesState = stateFilter === 'all' || pr.state === stateFilter;
-    
     const prId = `${pr.repo}#${pr.number}`;
     const isHidden = hiddenPRs.hasOwnProperty(prId);
     const matchesHidden = showHidden || !isHidden;
-    
-    return matchesSearch && matchesState && matchesHidden;
+    const matchesDraft = showDrafts || !pr.isDraft;
+    return matchesSearch && matchesState && matchesHidden && matchesDraft;
   });
-  
+
   renderPRs(filteredPRs, showHidden);
   updateStats();
 }
@@ -364,21 +396,21 @@ function renderPRs(prs, showHidden = false) {
       
       // Format review status
       const reviewStatus = pr.reviewStatus || {};
+      const cacheAgeMin = reviewStatus.cachedAt ? Math.round((Date.now() - reviewStatus.cachedAt) / 60000) : null;
+      const cacheInfo = cacheAgeMin !== null ? ` (fetched ${cacheAgeMin}m ago)` : '';
       let reviewBadge = '';
       if (reviewStatus.hasReviewed) {
-        const staleIndicator = reviewStatus.stale ? ' (cached)' : '';
+        const staleIndicator = reviewStatus.stale ? ' stale' : '';
         if (reviewStatus.state === 'APPROVED') {
-          reviewBadge = `<span class="state-badge state-success" title="You approved this PR${staleIndicator}">✓ Reviewed${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
+          reviewBadge = `<span class="state-badge state-success" title="You approved this PR${cacheInfo}${staleIndicator}">✓ Reviewed${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         } else if (reviewStatus.state === 'CHANGES_REQUESTED') {
-          reviewBadge = `<span class="state-badge state-warning" title="You requested changes${staleIndicator}">⚠️ Changes Requested${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
+          reviewBadge = `<span class="state-badge state-warning" title="You requested changes${cacheInfo}${staleIndicator}">⚠️ Changes Requested${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         } else if (reviewStatus.state === 'COMMENTED') {
-          reviewBadge = `<span class="state-badge state-info" title="You commented${staleIndicator}">💬 Commented${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
+          reviewBadge = `<span class="state-badge state-info" title="You commented${cacheInfo}${staleIndicator}">💬 Commented${reviewStatus.stale ? ' ⚠️' : ''}</span>`;
         }
       } else if (reviewStatus.allDismissed) {
-        // Show when all reviews were dismissed (usually due to new commits)
         reviewBadge = '<span class="state-badge state-muted" title="Your previous review was dismissed due to new changes">🔄 Review Dismissed</span>';
       } else if (reviewStatus.error && !reviewStatus.stale) {
-        // Show when we couldn't fetch review status and have no cache
         reviewBadge = '<span class="state-badge state-muted" title="Could not fetch review status - may need to refresh">❓ Review Status Unknown</span>';
       }
       
@@ -404,6 +436,7 @@ function renderPRs(prs, showHidden = false) {
               </span>
               <span class="state-badge state-${state.toLowerCase()}">${state.replace('_', ' ')}</span>
               ${reviewBadge}
+              ${pr.isDraft ? '<span class="state-badge state-draft" title="This is a draft PR">DRAFT</span>' : ''}
               ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
               ${isStale ? `<span class="state-badge state-stale" title="${ageDays} days old">STALE</span>` : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
@@ -1130,6 +1163,8 @@ document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
 document.getElementById('show-hidden').addEventListener('change', filterAndRenderPRs);
+document.getElementById('show-drafts').addEventListener('change', filterAndRenderPRs);
+document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
 
 document.querySelector('.close').addEventListener('click', hideModal);
 document.getElementById('modal').addEventListener('click', (e) => {
@@ -1195,5 +1230,6 @@ async function loadVersion() {
 loadTheme();
 loadHiddenPRs();
 loadWatchOnlyRepos();
+loadFilterPrefs();
 fetchPRs();
 loadVersion();
