@@ -305,6 +305,20 @@ h1 {
   font-size: 1.125rem;
 }
 
+#loading {
+  position: fixed;
+  top: 4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 1.25rem;
+  font-size: 0.9rem;
+  box-shadow: var(--shadow);
+}
+
 .error {
   color: var(--danger);
 }
