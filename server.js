@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3000;
 
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
-const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
+const CACHE_FILE = process.env.REVIEW_CACHE_FILE || '/data/review-cache.json';
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -160,6 +161,119 @@ async function getGhreportEnv() {
   return process.env;
 }
 
+// ─── Persistent cache ────────────────────────────────────────────────────────
+
+async function loadCacheFromDisk() {
+  try {
+    const content = await fs.readFile(CACHE_FILE, 'utf-8');
+    const entries = JSON.parse(content);
+    let loaded = 0;
+    for (const [key, entry] of Object.entries(entries)) {
+      if (entry.timestamp && (Date.now() - entry.timestamp) < CACHE_TTL) {
+        reviewCache.set(key, entry);
+        loaded++;
+      }
+    }
+    console.log(`Review cache: loaded ${loaded} valid entries from ${CACHE_FILE}`);
+  } catch (_) { /* cache file missing or corrupt — start fresh */ }
+}
+
+async function saveCacheToDisk() {
+  try {
+    const entries = Object.fromEntries(reviewCache.entries());
+    await fs.writeFile(CACHE_FILE, JSON.stringify(entries));
+  } catch (err) {
+    console.warn('Could not save review cache to disk:', err.message);
+  }
+}
+
+// ─── Review data processing ───────────────────────────────────────────────────
+
+function processReviewData(data, username) {
+  const prMeta = {
+    title: data.title,
+    author: data.author,
+    state: data.state,
+    reviewDecision: data.reviewDecision,
+    isDraft: data.isDraft || false,
+  };
+
+  const reviews = data.reviews?.nodes || data.reviews || [];
+  if (!Array.isArray(reviews) || reviews.length === 0) {
+    return { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
+  }
+
+  const allUserReviews = reviews.filter(r => r.author?.login === username);
+  const activeReviews = allUserReviews
+    .filter(r => r.state !== 'DISMISSED')
+    .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+  if (activeReviews.length > 0) {
+    const latest = activeReviews[0];
+    return { hasReviewed: true, state: latest.state, submittedAt: latest.submittedAt, updatedAt: data.updatedAt, prMeta };
+  } else if (allUserReviews.length > 0) {
+    return { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true, prMeta };
+  }
+  return { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
+}
+
+// ─── GraphQL batch review fetch ───────────────────────────────────────────────
+
+async function fetchReviewStatusBatch(prs, username) {
+  if (prs.length === 0) return {};
+
+  // Group by repo so we emit one repository() block per repo
+  const byRepo = {};
+  for (const pr of prs) {
+    if (!byRepo[pr.repo]) byRepo[pr.repo] = [];
+    byRepo[pr.repo].push(pr.number);
+  }
+
+  const repos = Object.keys(byRepo);
+  const repoAliasMap = {}; // r0 -> 'owner/repo'
+  repos.forEach((repo, i) => { repoAliasMap[`r${i}`] = repo; });
+
+  const prFields = `title isDraft state updatedAt reviewDecision author { login } reviews(last: 20) { nodes { author { login } state submittedAt } }`;
+  const repoBlocks = repos.map((repo, i) => {
+    const [owner, name] = repo.split('/');
+    const prBlocks = byRepo[repo].map(n => `p${n}: pullRequest(number: ${n}) { ${prFields} }`).join(' ');
+    return `r${i}: repository(owner: "${owner}", name: "${name}") { ${prBlocks} }`;
+  });
+
+  const query = `{ ${repoBlocks.join(' ')} }`;
+  const tmpFile = path.join('/tmp', `pr-dashboard-gql-${Date.now()}.graphql`);
+
+  try {
+    await fs.writeFile(tmpFile, query);
+    const { stdout } = await execAsync(`gh api graphql -f query=@${tmpFile}`, { timeout: 45000 });
+    const result = JSON.parse(stdout);
+
+    if (result.errors?.length) {
+      console.warn('GraphQL batch warnings:', result.errors.map(e => e.message).join('; '));
+    }
+
+    const out = {};
+    for (const [repoAlias, repoData] of Object.entries(result.data || {})) {
+      const repo = repoAliasMap[repoAlias];
+      if (!repoData) continue;
+      for (const [prAlias, prData] of Object.entries(repoData)) {
+        if (!prData) continue;
+        const number = parseInt(prAlias.slice(1));
+        out[`${repo}#${number}`] = prData;
+      }
+    }
+    console.log(`GraphQL batch: fetched ${Object.keys(out).length}/${prs.length} PRs in one call`);
+    return out;
+  } catch (err) {
+    console.error('GraphQL batch fetch failed, will fall back to individual calls:', err.message);
+    return {};
+  } finally {
+    fs.unlink(tmpFile).catch(() => {});
+  }
+}
+
+// ─── Per-PR review check (used for post-submit refresh and stale fallback) ────
+
 // Check if current user has reviewed a PR and get updatedAt (with caching and retry)
 async function checkUserReview(owner, repo, number, username, retries = 2) {
   const cacheKey = `${owner}/${repo}#${number}`;
@@ -284,26 +398,65 @@ app.get('/api/prs', async (req, res) => {
     console.log(`Current authenticated user: ${currentUser}`);
     
     if (currentUser) {
-      // Check reviews in parallel for better performance, but handle errors gracefully
-      const reviewPromises = prs.map(async (pr) => {
-        try {
-          const [owner, repo] = pr.repo.split('/');
-          const reviewStatus = await checkUserReview(owner, repo, pr.number, currentUser);
-          if (reviewStatus.updatedAt) pr.updatedAt = reviewStatus.updatedAt;
-          if (reviewStatus.prMeta) {
-            if (reviewStatus.prMeta.title) pr.title = reviewStatus.prMeta.title;
-            if (reviewStatus.prMeta.author) pr.author = reviewStatus.prMeta.author;
-            if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
-          if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
-          }
-          return { ...pr, reviewStatus };
-        } catch (error) {
-          console.error(`Failed to check review for PR ${pr.repo}#${pr.number}:`, error.message);
-          return { ...pr, reviewStatus: { hasReviewed: false, updatedAt: null } };
+      const now = Date.now();
+
+      // Split PRs into cache hits and misses
+      const hits = {};
+      const misses = [];
+      for (const pr of prs) {
+        const key = `${pr.repo}#${pr.number}`;
+        const cached = reviewCache.get(key);
+        if (cached && (now - cached.timestamp) < CACHE_TTL) {
+          hits[key] = { ...cached.status, cachedAt: cached.timestamp };
+        } else {
+          misses.push(pr);
         }
+      }
+      console.log(`Review cache: ${Object.keys(hits).length} hits, ${misses.length} misses`);
+
+      // Fetch all misses in a single GraphQL call
+      const batchData = await fetchReviewStatusBatch(misses, currentUser);
+      const batchTimestamp = Date.now();
+
+      // For any PR the batch didn't return (deleted/private), fall back to individual call
+      const stillMissing = misses.filter(pr => !batchData[`${pr.repo}#${pr.number}`]);
+      if (stillMissing.length > 0) {
+        console.log(`Falling back to individual calls for ${stillMissing.length} PRs`);
+        await Promise.all(stillMissing.map(async pr => {
+          const [owner, repo] = pr.repo.split('/');
+          try {
+            const status = await checkUserReview(owner, repo, pr.number, currentUser);
+            batchData[`${pr.repo}#${pr.number}`] = null; // sentinel — already cached by checkUserReview
+            hits[`${pr.repo}#${pr.number}`] = status;
+          } catch (_) {}
+        }));
+      }
+
+      // Store batch results in cache
+      for (const [key, data] of Object.entries(batchData)) {
+        if (!data) continue;
+        const [ownerRepo, num] = key.split('#');
+        const status = processReviewData(data, currentUser);
+        reviewCache.set(key, { status, timestamp: batchTimestamp });
+        hits[key] = { ...status, cachedAt: batchTimestamp };
+      }
+
+      // Save updated cache to disk (non-blocking)
+      if (misses.length > 0) saveCacheToDisk();
+
+      // Apply review statuses to PRs
+      prs = prs.map(pr => {
+        const key = `${pr.repo}#${pr.number}`;
+        const reviewStatus = hits[key] || { hasReviewed: false };
+        if (reviewStatus.updatedAt) pr.updatedAt = reviewStatus.updatedAt;
+        if (reviewStatus.prMeta) {
+          if (reviewStatus.prMeta.title) pr.title = reviewStatus.prMeta.title;
+          if (reviewStatus.prMeta.author) pr.author = reviewStatus.prMeta.author;
+          if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
+          if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
+        }
+        return { ...pr, reviewStatus };
       });
-      
-      prs = await Promise.all(reviewPromises);
     }
     
     res.json({ success: true, prs, currentUser });
@@ -541,4 +694,5 @@ app.post('/api/refresh-ghreport', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`PR Dashboard running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  loadCacheFromDisk();
 });
