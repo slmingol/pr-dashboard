@@ -108,6 +108,15 @@ h1 {
   transform: translateY(-1px);
 }
 
+.stat-item-clickable {
+  cursor: pointer;
+  border-color: var(--border);
+}
+
+.stat-item-clickable:hover {
+  border-color: var(--primary);
+}
+
 .stat-label {
   display: block;
   font-size: 0.6875rem;

@@ -4,6 +4,7 @@ let hiddenPRs = {};
 let watchOnlyRepos = {};
 let renderLimit = 25;
 let selectedPRId = null;
+let subscribedRepos = [];
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -1226,6 +1227,57 @@ async function loadVersion() {
   } catch (_) {}
 }
 
+async function loadRepos() {
+  try {
+    const res = await fetch('/api/repos');
+    const data = await res.json();
+    if (data.success) {
+      subscribedRepos = data.repos;
+      document.getElementById('stat-repos').textContent = subscribedRepos.length;
+    }
+  } catch (_) {}
+}
+
+function showReposModal() {
+  if (!subscribedRepos.length) return;
+
+  // Group by org
+  const byOrg = {};
+  for (const r of subscribedRepos) {
+    const [org, repo] = r.split('/');
+    if (!byOrg[org]) byOrg[org] = [];
+    byOrg[org].push(repo);
+  }
+
+  // Build PR count lookup from current data
+  const prCounts = {};
+  for (const pr of allPRs) {
+    prCounts[pr.repo] = (prCounts[pr.repo] || 0) + 1;
+  }
+
+  const orgs = Object.keys(byOrg).sort();
+  const rows = orgs.map(org => {
+    const repoList = byOrg[org].sort().map(repo => {
+      const full = `${org}/${repo}`;
+      const count = prCounts[full];
+      const badge = count ? ` <span class="state-badge state-info" style="font-size:9px">${count} PR${count > 1 ? 's' : ''}</span>` : '';
+      return `<li style="padding:0.2rem 0;font-size:0.85rem;color:var(--text-muted)">${repo}${badge}</li>`;
+    }).join('');
+    return `
+      <div style="margin-bottom:1rem">
+        <div style="font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.35rem;padding-bottom:0.25rem;border-bottom:1px solid var(--border)">${org} <span style="font-weight:400">(${byOrg[org].length})</span></div>
+        <ul style="list-style:none;margin:0;padding:0 0 0 0.5rem">${repoList}</ul>
+      </div>`;
+  }).join('');
+
+  showModal(`
+    <h2>Watched Repos <span style="font-size:1rem;font-weight:400;color:var(--text-muted)">(${subscribedRepos.length} total)</span></h2>
+    <div style="margin-top:1rem;max-height:60vh;overflow-y:auto">${rows}</div>
+  `);
+}
+
+document.getElementById('repos-stat').addEventListener('click', showReposModal);
+
 // Initial load
 loadTheme();
 loadHiddenPRs();
@@ -1233,3 +1285,4 @@ loadWatchOnlyRepos();
 loadFilterPrefs();
 fetchPRs();
 loadVersion();
+loadRepos();

@@ -127,10 +127,8 @@ async function getCurrentUser() {
   }
 }
 
-// Read subscribedRepos from ghreport config.yaml, falling back to the env var.
-// The container binary reads subscribedRepos from env; the config file is the
-// canonical list (mounted from host), so prefer it when present.
-async function getGhreportEnv() {
+// Read subscribedRepos list from ghreport config.yaml or env var.
+async function getSubscribedRepos() {
   const configPath = process.env.GHREPORT_CONFIG || '/root/.config/ghreport/config.yaml';
   try {
     const content = await fs.readFile(configPath, 'utf-8');
@@ -141,14 +139,24 @@ async function getGhreportEnv() {
       if (inSection) {
         const m = line.match(/^\s+-\s+(\S+)/);
         if (m) { repos.push(m[1]); continue; }
-        if (/^\S/.test(line)) break; // next top-level key
+        if (/^\S/.test(line)) break;
       }
     }
-    if (repos.length > 0) {
-      console.log(`ghreport: using ${repos.length} repos from ${configPath}`);
-      return { ...process.env, subscribedRepos: repos.join(' ') };
-    }
-  } catch (_) { /* config not present, fall through */ }
+    if (repos.length > 0) return { repos, source: configPath };
+  } catch (_) { /* fall through */ }
+
+  // Fall back to env var
+  const envRepos = (process.env.subscribedRepos || '').split(/\s+/).filter(Boolean);
+  if (envRepos.length > 0) return { repos: envRepos, source: 'env' };
+  return { repos: [], source: null };
+}
+
+async function getGhreportEnv() {
+  const { repos, source } = await getSubscribedRepos();
+  if (repos.length > 0) {
+    console.log(`ghreport: using ${repos.length} repos from ${source}`);
+    return { ...process.env, subscribedRepos: repos.join(' ') };
+  }
   return process.env;
 }
 
@@ -244,6 +252,15 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
 }
 
 // API Endpoints
+app.get('/api/repos', async (req, res) => {
+  try {
+    const { repos, source } = await getSubscribedRepos();
+    res.json({ success: true, repos: repos.sort(), source });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/user', async (req, res) => {
   try {
     const username = await getCurrentUser();
