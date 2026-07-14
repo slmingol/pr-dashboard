@@ -3,9 +3,59 @@ const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
+const https = require('https');
 
 const execAsync = promisify(exec);
 const app = express();
+
+// Simple concurrency limiter (no external deps)
+function pLimit(concurrency) {
+  let active = 0;
+  const queue = [];
+  const run = () => {
+    while (active < concurrency && queue.length > 0) {
+      const { fn, resolve, reject } = queue.shift();
+      active++;
+      fn().then(v => { active--; resolve(v); run(); })
+          .catch(e => { active--; reject(e); run(); });
+    }
+  };
+  return fn => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); run(); });
+}
+
+// GitHub REST API GET with ETag support (GraphQL endpoint does not support ETags)
+function githubGet(apiPath, extraHeaders = {}) {
+  return new Promise((resolve, reject) => {
+    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const req = https.request(
+      {
+        hostname: 'api.github.com',
+        path: apiPath,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'pr-dashboard',
+          ...extraHeaders,
+        },
+      },
+      res => {
+        let body = '';
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => resolve({
+          status: res.statusCode,
+          etag: res.headers['etag'] || null,
+          rateRemaining: parseInt(res.headers['x-ratelimit-remaining'] ?? '-1'),
+          body,
+        }));
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(12000, () => req.destroy(new Error('GitHub API timeout')));
+    req.end();
+  });
+}
 const PORT = process.env.PORT || 3000;
 
 // Cache for review statuses to handle transient API failures
@@ -220,59 +270,89 @@ function processReviewData(data, username) {
   return { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
 }
 
-// ─── GraphQL batch review fetch ───────────────────────────────────────────────
+// ─── REST + ETag per-PR review fetch ─────────────────────────────────────────
+// Replaces the GraphQL batch. ETags allow 304 Not Modified responses which cost
+// zero primary rate-limit points when PR/review data is unchanged.
 
-async function fetchReviewStatusBatch(prs, username) {
+async function fetchReviewStatusRest(prs, username) {
   if (prs.length === 0) return {};
 
-  // Group by repo so we emit one repository() block per repo
-  const byRepo = {};
-  for (const pr of prs) {
-    if (!byRepo[pr.repo]) byRepo[pr.repo] = [];
-    byRepo[pr.repo].push(pr.number);
-  }
+  const limit = pLimit(8);
+  const results = {};
+  let fetched = 0, notModified = 0, errors = 0;
 
-  const repos = Object.keys(byRepo);
-  const repoAliasMap = {}; // r0 -> 'owner/repo'
-  repos.forEach((repo, i) => { repoAliasMap[`r${i}`] = repo; });
+  await Promise.all(prs.map(pr => limit(async () => {
+    const [owner, repo] = pr.repo.split('/');
+    const key = `${pr.repo}#${pr.number}`;
+    const cached = reviewCache.get(key); // may be stale — that's why it's a miss
 
-  const prFields = `title isDraft state updatedAt reviewDecision author { login } reviews(last: 20) { nodes { author { login } state submittedAt } }`;
-  const repoBlocks = repos.map((repo, i) => {
-    const [owner, name] = repo.split('/');
-    const prBlocks = byRepo[repo].map(n => `p${n}: pullRequest(number: ${n}) { ${prFields} }`).join(' ');
-    return `r${i}: repository(owner: "${owner}", name: "${name}") { ${prBlocks} }`;
-  });
+    try {
+      const prHeaders  = cached?.prEtag      ? { 'If-None-Match': cached.prEtag }      : {};
+      const rvHeaders  = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
 
-  const query = `{ ${repoBlocks.join(' ')} }`;
-  const tmpFile = path.join('/tmp', `pr-dashboard-gql-${Date.now()}.graphql`);
+      const [prRes, rvRes] = await Promise.all([
+        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}`, prHeaders),
+        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=50`, rvHeaders),
+      ]);
 
-  try {
-    await fs.writeFile(tmpFile, query);
-    const { stdout } = await execAsync(`gh api graphql -f query=@${tmpFile}`, { timeout: 45000 });
-    const result = JSON.parse(stdout);
-
-    if (result.errors?.length) {
-      console.warn('GraphQL batch warnings:', result.errors.map(e => e.message).join('; '));
-    }
-
-    const out = {};
-    for (const [repoAlias, repoData] of Object.entries(result.data || {})) {
-      const repo = repoAliasMap[repoAlias];
-      if (!repoData) continue;
-      for (const [prAlias, prData] of Object.entries(repoData)) {
-        if (!prData) continue;
-        const number = parseInt(prAlias.slice(1));
-        out[`${repo}#${number}`] = prData;
+      if (prRes.status === 304 && rvRes.status === 304) {
+        // Nothing changed — refresh TTL so cache stays warm
+        if (cached) reviewCache.set(key, { ...cached, timestamp: Date.now() });
+        notModified++;
+        return;
       }
+
+      const rawPr = prRes.status === 200
+        ? (() => { const d = JSON.parse(prRes.body); return { title: d.title, user: d.user, state: d.state, draft: d.draft, merged: d.merged, updated_at: d.updated_at, created_at: d.created_at, review_decision: d.review_decision }; })()
+        : cached?.rawPr;
+      const rawReviews = rvRes.status === 200
+        ? JSON.parse(rvRes.body).map(r => ({ user: r.user, state: r.state, submitted_at: r.submitted_at }))
+        : (cached?.rawReviews || []);
+
+      if (!rawPr) { errors++; return; }
+
+      const prMeta = {
+        title: rawPr.title,
+        author: { login: rawPr.user?.login },
+        state: rawPr.merged ? 'MERGED' : (rawPr.state === 'closed' ? 'CLOSED' : 'OPEN'),
+        reviewDecision: rawPr.review_decision || null,
+        isDraft: rawPr.draft || false,
+        createdAt: rawPr.created_at || null,
+      };
+
+      const allUserReviews = rawReviews.filter(r => r.user?.login === username);
+      const activeReviews = allUserReviews
+        .filter(r => r.state !== 'DISMISSED')
+        .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+      let status;
+      if (activeReviews.length > 0) {
+        const latest = activeReviews[0];
+        status = { hasReviewed: true, state: latest.state, submittedAt: latest.submitted_at, updatedAt: rawPr.updated_at, prMeta };
+      } else if (allUserReviews.length > 0) {
+        status = { hasReviewed: false, updatedAt: rawPr.updated_at, allDismissed: true, prMeta };
+      } else {
+        status = { hasReviewed: false, updatedAt: rawPr.updated_at, prMeta };
+      }
+
+      reviewCache.set(key, {
+        status,
+        timestamp: Date.now(),
+        prEtag:      prRes.etag ?? cached?.prEtag,
+        reviewsEtag: rvRes.etag ?? cached?.reviewsEtag,
+        rawPr,
+        rawReviews,
+      });
+      results[key] = status;
+      fetched++;
+    } catch (err) {
+      console.error(`REST fetch error for ${key}: ${err.message}`);
+      errors++;
     }
-    console.log(`GraphQL batch: fetched ${Object.keys(out).length}/${prs.length} PRs in one call`);
-    return out;
-  } catch (err) {
-    console.error('GraphQL batch fetch failed, will fall back to individual calls:', err.message);
-    return {};
-  } finally {
-    fs.unlink(tmpFile).catch(() => {});
-  }
+  })));
+
+  console.log(`REST+ETag: ${fetched} fetched, ${notModified} not-modified (304), ${errors} errors — ${prs.length} misses total`);
+  return results;
 }
 
 // ─── Per-PR review check (used for post-submit refresh and stale fallback) ────
@@ -421,33 +501,31 @@ app.get('/api/prs', async (req, res) => {
       missCount = misses.length;
       console.log(`Review cache: ${hitCount} hits, ${missCount} misses`);
 
-      // Fetch all misses in a single GraphQL call
+      // Fetch misses via REST+ETag (parallel, concurrency-limited)
       const ghFetchStart = Date.now();
-      const batchData = await fetchReviewStatusBatch(misses, currentUser);
-      const batchTimestamp = Date.now();
-      ghFetchMs = misses.length > 0 ? batchTimestamp - ghFetchStart : 0;
+      if (misses.length > 0) {
+        await fetchReviewStatusRest(misses, currentUser);
+        ghFetchMs = Date.now() - ghFetchStart;
+      }
 
-      // For any PR the batch didn't return (deleted/private), fall back to individual call
-      const stillMissing = misses.filter(pr => !batchData[`${pr.repo}#${pr.number}`]);
+      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases)
+      for (const pr of misses) {
+        const key = `${pr.repo}#${pr.number}`;
+        const cached = reviewCache.get(key);
+        if (cached?.status) hits[key] = { ...cached.status, cachedAt: cached.timestamp };
+      }
+
+      // For anything still not resolved: fall back to individual gh pr view call
+      const stillMissing = misses.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
-        console.log(`Falling back to individual calls for ${stillMissing.length} PRs`);
+        console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
         await Promise.all(stillMissing.map(async pr => {
           const [owner, repo] = pr.repo.split('/');
           try {
             const status = await checkUserReview(owner, repo, pr.number, currentUser);
-            batchData[`${pr.repo}#${pr.number}`] = null; // sentinel — already cached by checkUserReview
             hits[`${pr.repo}#${pr.number}`] = status;
           } catch (_) {}
         }));
-      }
-
-      // Store batch results in cache
-      for (const [key, data] of Object.entries(batchData)) {
-        if (!data) continue;
-        const [ownerRepo, num] = key.split('#');
-        const status = processReviewData(data, currentUser);
-        reviewCache.set(key, { status, timestamp: batchTimestamp });
-        hits[key] = { ...status, cachedAt: batchTimestamp };
       }
 
       // Save updated cache to disk (non-blocking)
@@ -467,6 +545,7 @@ app.get('/api/prs', async (req, res) => {
           if (reviewStatus.prMeta.author) pr.author = reviewStatus.prMeta.author;
           if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
           if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
+          if (reviewStatus.prMeta.createdAt) pr.createdAt = reviewStatus.prMeta.createdAt;
         }
         return { ...pr, reviewStatus };
       });
@@ -569,6 +648,10 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
     console.error(`Review command failed: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+app.get('/metrics', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'metrics.html'));
 });
 
 app.get('/api/health', (req, res) => {

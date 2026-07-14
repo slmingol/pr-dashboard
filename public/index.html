@@ -13,6 +13,7 @@
       <h1>🔀 Pull Request Dashboard</h1>
       <div id="perf-bar" class="perf-bar"></div>
       <div class="header-actions">
+        <button id="analytics-btn" class="btn btn-muted" title="Analytics panel">📊</button>
         <button id="keyboard-help-btn" class="btn btn-muted" title="Keyboard shortcuts (?)">⌨</button>
         <button id="theme-toggle" class="btn btn-muted" title="Toggle theme">🌙</button>
         <button id="refresh-ghreport-btn" class="btn btn-success" title="Run ghreport to fetch latest PRs">🔄 Refresh Data</button>
@@ -55,6 +56,27 @@
       <div class="stat-item stat-item-clickable" id="repos-stat" title="Click to view watched repos">
         <span class="stat-label">Repos</span>
         <span class="stat-value stat-muted" id="stat-repos">—</span>
+      </div>
+    </div>
+
+    <!-- Analytics panel (expandable) -->
+    <div id="analytics-panel" class="analytics-panel hidden">
+      <div class="analytics-grid">
+        <div class="analytics-section">
+          <h3 class="analytics-heading">Your Review Activity</h3>
+          <div id="analytics-activity"></div>
+        </div>
+        <div class="analytics-section">
+          <h3 class="analytics-heading">Age Distribution</h3>
+          <div id="analytics-age"></div>
+        </div>
+        <div class="analytics-section analytics-section-wide">
+          <h3 class="analytics-heading">PRs by Repo</h3>
+          <div id="analytics-repos"></div>
+        </div>
+      </div>
+      <div class="analytics-footer">
+        <a href="/metrics" target="_blank" class="analytics-metrics-link">Open full metrics page ↗</a>
       </div>
     </div>
 

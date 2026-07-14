@@ -1356,6 +1356,120 @@ function showReposModal() {
 
 document.getElementById('repos-stat').addEventListener('click', showReposModal);
 
+// ── Analytics panel ───────────────────────────────────────────────────────────
+
+function fmtDuration(ms) {
+  if (ms < 3600000)  return `${Math.round(ms / 60000)}m`;
+  if (ms < 86400000) return `${(ms / 3600000).toFixed(1)}h`;
+  return `${(ms / 86400000).toFixed(1)}d`;
+}
+
+function computeAnalytics(prs) {
+  const now = Date.now();
+  const activity = { APPROVED: 0, CHANGES_REQUESTED: 0, COMMENTED: 0, pending: 0 };
+  const byRepo = {};
+  const ageBuckets = { '<1d': 0, '1-3d': 0, '3-7d': 0, '>1w': 0 };
+  const responseTimes = [];
+
+  for (const pr of prs) {
+    if (pr.state !== 'OPEN' && pr.state !== 'open') continue;
+
+    const rs = pr.reviewStatus;
+    if (rs?.hasReviewed && rs.state) activity[rs.state] = (activity[rs.state] || 0) + 1;
+    else activity.pending++;
+
+    const repo = pr.repo || pr.repository?.nameWithOwner || '';
+    if (!byRepo[repo]) byRepo[repo] = { total: 0, reviewed: 0 };
+    byRepo[repo].total++;
+    if (rs?.hasReviewed) byRepo[repo].reviewed++;
+
+    const ageDays = pr.updatedAt ? (now - new Date(pr.updatedAt)) / 86400000 : 0;
+    if      (ageDays < 1)  ageBuckets['<1d']++;
+    else if (ageDays < 3)  ageBuckets['1-3d']++;
+    else if (ageDays < 7)  ageBuckets['3-7d']++;
+    else                   ageBuckets['>1w']++;
+
+    // Review response time: PR created → review submitted (last 90 days only)
+    const cutoff = now - 90 * 86400000;
+    if (rs?.hasReviewed && rs.submittedAt && pr.createdAt && new Date(pr.createdAt) >= cutoff) {
+      const ms = new Date(rs.submittedAt) - new Date(pr.createdAt);
+      if (ms > 0) responseTimes.push({ ms, repo, title: pr.title, number: pr.number });
+    }
+  }
+
+  const avgResponseMs = responseTimes.length
+    ? responseTimes.reduce((s, r) => s + r.ms, 0) / responseTimes.length
+    : null;
+
+  return { activity, byRepo, ageBuckets, responseTimes, avgResponseMs };
+}
+
+function renderAnalyticsPanel() {
+  const openPRs = allPRs.filter(p => p.state === 'OPEN' || p.state === 'open');
+  const { activity, byRepo, ageBuckets, responseTimes, avgResponseMs } = computeAnalytics(openPRs);
+
+  // Activity
+  const activityEl = document.getElementById('analytics-activity');
+  const actRows = [
+    { label: 'Approved',           value: activity.APPROVED,           color: 'var(--success)' },
+    { label: 'Changes requested',  value: activity.CHANGES_REQUESTED,  color: 'var(--danger)'  },
+    { label: 'Commented',          value: activity.COMMENTED,          color: 'var(--warning)'  },
+    { label: 'Pending your review',value: activity.pending,            color: 'var(--primary)'  },
+  ];
+  activityEl.innerHTML = actRows.map(r => `
+    <div class="analytics-stat-row">
+      <span class="analytics-stat-label" style="color:${r.color}">${r.label}</span>
+      <span class="analytics-stat-value">${r.value}</span>
+    </div>`).join('');
+
+  // Age distribution
+  const ageEl = document.getElementById('analytics-age');
+  const maxAge = Math.max(...Object.values(ageBuckets), 1);
+  ageEl.innerHTML = Object.entries(ageBuckets).map(([label, count]) => `
+    <div class="analytics-bar-row">
+      <span class="analytics-bar-label">${label}</span>
+      <div class="analytics-bar-track"><div class="analytics-bar-fill" style="width:${Math.round(count / maxAge * 100)}%"></div></div>
+      <span class="analytics-bar-count">${count}</span>
+    </div>`).join('');
+
+  // Response time
+  const rtEl = document.getElementById('analytics-activity');
+  if (avgResponseMs != null) {
+    rtEl.insertAdjacentHTML('beforeend', `
+      <div class="analytics-stat-row" style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem">
+        <span class="analytics-stat-label">Avg response time</span>
+        <span class="analytics-stat-value" style="color:var(--yellow)">${fmtDuration(avgResponseMs)}</span>
+      </div>
+      <div class="analytics-stat-row">
+        <span class="analytics-stat-label">Reviews with timing</span>
+        <span class="analytics-stat-value">${responseTimes.length}</span>
+      </div>`);
+  }
+
+  // Repos table (top 10 by PR count)
+  const reposEl = document.getElementById('analytics-repos');
+  const sorted = Object.entries(byRepo).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
+  const maxPRs = Math.max(...sorted.map(([, v]) => v.total), 1);
+  reposEl.innerHTML = `
+    <table class="analytics-repo-table">
+      <thead><tr><th>Repo</th><th>Open PRs</th><th>Reviewed</th><th>Pending</th></tr></thead>
+      <tbody>${sorted.map(([repo, v]) => `
+        <tr>
+          <td>${repo.split('/')[1] || repo}</td>
+          <td>${v.total}</td>
+          <td style="color:var(--success)">${v.reviewed}</td>
+          <td style="color:var(--warning)">${v.total - v.reviewed}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+document.getElementById('analytics-btn').addEventListener('click', () => {
+  const panel = document.getElementById('analytics-panel');
+  const isHidden = panel.classList.toggle('hidden');
+  if (!isHidden) renderAnalyticsPanel();
+});
+
 // Initial load
 loadTheme();
 loadHiddenPRs();

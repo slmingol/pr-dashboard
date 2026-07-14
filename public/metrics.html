@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PR Metrics</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .metrics-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .metrics-header h1 { font-size: 1.6rem; }
+    .metrics-back { font-size: 0.85rem; color: var(--primary); text-decoration: none; }
+    .metrics-back:hover { text-decoration: underline; }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .metrics-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+    }
+    .metrics-card-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+    }
+    .metrics-big-stat {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+    .metrics-big-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.3rem; }
+
+    .metrics-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .metrics-section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .metrics-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 700px) { .metrics-two-col { grid-template-columns: 1fr; } }
+
+    .stat-pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .stat-pill {
+      display: flex; align-items: center; gap: 0.45rem;
+      background: var(--surface-hover); border: 1px solid var(--border);
+      border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.82rem;
+    }
+    .stat-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .stat-pill-count { font-weight: 700; color: var(--text); }
+    .stat-pill-label { color: var(--text-muted); }
+
+    .bar-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.22rem 0; font-size: 0.82rem; }
+    .bar-label { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+    .bar-label-repo { width: 11rem; overflow: hidden; text-overflow: ellipsis; }
+    .bar-label-age  { width: 4.5rem; }
+    .bar-track { flex: 1; height: 10px; background: var(--surface-hover); border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 5px; background: var(--primary); }
+    .bar-count { color: var(--text-muted); width: 2.5rem; text-align: right; font-size: 0.78rem; flex-shrink: 0; }
+
+    .full-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    .full-table th {
+      text-align: left; color: var(--text-muted); font-weight: 500;
+      padding: 0.25rem 0.5rem 0.5rem; border-bottom: 1px solid var(--border);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .full-table td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--surface-hover); color: var(--text-muted); }
+    .full-table td:first-child { color: var(--text); font-family: monospace; font-size: 0.8rem; }
+    .full-table tr:last-child td { border-bottom: none; }
+    .full-table tr:hover td { background: var(--surface-hover); }
+
+    .c-success { color: var(--success); }
+    .c-danger   { color: var(--danger);  }
+    .c-warning  { color: var(--warning); }
+    .c-primary  { color: var(--primary); }
+    .c-muted    { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="metrics-header">
+    <h1>📊 PR Metrics</h1>
+    <a href="/" class="metrics-back">← Back to dashboard</a>
+  </div>
+
+  <div id="loading" class="loading">Loading...</div>
+  <div id="error" class="error hidden"></div>
+
+  <div id="metrics-body" class="hidden">
+    <!-- Summary pills -->
+    <div class="metrics-grid" id="summary-grid"></div>
+
+    <div class="metrics-two-col">
+      <!-- Review activity -->
+      <div class="metrics-section">
+        <div class="metrics-section-title">Your Review Activity (open PRs)</div>
+        <div class="stat-pill-row" id="activity-pills"></div>
+        <div id="response-time-summary"></div>
+      </div>
+      <!-- Age distribution -->
+      <div class="metrics-section">
+        <div class="metrics-section-title">Age of Open PRs</div>
+        <div id="age-bars"></div>
+      </div>
+    </div>
+
+    <!-- Review response time -->
+    <div class="metrics-section" id="response-time-section">
+      <div class="metrics-section-title">Review Response Time — last 90 days (PR opened → your review)</div>
+      <div id="response-time-bars"></div>
+      <table class="full-table" id="response-time-table" style="margin-top:0.75rem">
+        <thead><tr><th>PR</th><th>Repo</th><th>Response time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- PRs by repo bar chart -->
+    <div class="metrics-section">
+      <div class="metrics-section-title">Open PRs by Repo</div>
+      <div id="repo-bars"></div>
+    </div>
+
+    <!-- Author breakdown -->
+    <div class="metrics-section">
+      <div class="metrics-section-title">Author Breakdown (open PRs)</div>
+      <table class="full-table" id="author-table">
+        <thead><tr><th>Author</th><th>Open PRs</th><th>You reviewed</th><th>Pending</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Full repo table -->
+    <div class="metrics-section">
+      <div class="metrics-section-title">All Repos</div>
+      <table class="full-table" id="repo-table">
+        <thead><tr><th>Repo</th><th>Open</th><th>Reviewed</th><th>Pending</th><th>Drafts</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+async function load() {
+  const res = await fetch('/api/prs');
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  return data.prs;
+}
+
+function ageDays(pr) {
+  if (!pr.updatedAt) return 0;
+  return (Date.now() - new Date(pr.updatedAt)) / 86400000;
+}
+
+function fmtDuration(ms) {
+  if (ms < 3600000)  return `${Math.round(ms / 60000)}m`;
+  if (ms < 86400000) return `${(ms / 3600000).toFixed(1)}h`;
+  return `${(ms / 86400000).toFixed(1)}d`;
+}
+
+function render(prs) {
+  const open   = prs.filter(p => p.state === 'OPEN');
+  const closed = prs.filter(p => p.state === 'CLOSED');
+  const merged = prs.filter(p => p.state === 'MERGED');
+  const drafts = open.filter(p => p.isDraft);
+
+  // Summary grid
+  const summaryData = [
+    { label: 'Open PRs',   value: open.length,   color: 'var(--success)' },
+    { label: 'Drafts',     value: drafts.length,  color: 'var(--text-muted)' },
+    { label: 'Merged',     value: merged.length,  color: 'var(--primary)' },
+    { label: 'Closed',     value: closed.length,  color: 'var(--danger)' },
+  ];
+  document.getElementById('summary-grid').innerHTML = summaryData.map(s => `
+    <div class="metrics-card">
+      <div class="metrics-card-title">${s.label}</div>
+      <div class="metrics-big-stat" style="color:${s.color}">${s.value}</div>
+    </div>`).join('');
+
+  // Review activity
+  const act = { APPROVED: 0, CHANGES_REQUESTED: 0, COMMENTED: 0, pending: 0 };
+  for (const pr of open) {
+    const rs = pr.reviewStatus;
+    if (rs?.hasReviewed && rs.state) act[rs.state] = (act[rs.state] || 0) + 1;
+    else act.pending++;
+  }
+  const pills = [
+    { label: 'Approved',          count: act.APPROVED,          color: 'var(--success)' },
+    { label: 'Changes requested', count: act.CHANGES_REQUESTED, color: 'var(--danger)'  },
+    { label: 'Commented',         count: act.COMMENTED,         color: 'var(--warning)' },
+    { label: 'Pending',           count: act.pending,           color: 'var(--primary)' },
+  ];
+  document.getElementById('activity-pills').innerHTML = pills.map(p => `
+    <div class="stat-pill">
+      <span class="stat-pill-dot" style="background:${p.color}"></span>
+      <span class="stat-pill-count">${p.count}</span>
+      <span class="stat-pill-label">${p.label}</span>
+    </div>`).join('');
+
+  // Age bars
+  const ages = { '< 1 day': 0, '1 – 3 days': 0, '3 – 7 days': 0, '> 1 week': 0 };
+  for (const pr of open) {
+    const d = ageDays(pr);
+    if      (d < 1) ages['< 1 day']++;
+    else if (d < 3) ages['1 – 3 days']++;
+    else if (d < 7) ages['3 – 7 days']++;
+    else            ages['> 1 week']++;
+  }
+  const maxAge = Math.max(...Object.values(ages), 1);
+  document.getElementById('age-bars').innerHTML = Object.entries(ages).map(([lbl, n]) => `
+    <div class="bar-row">
+      <span class="bar-label bar-label-age">${lbl}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(n/maxAge*100)}%"></div></div>
+      <span class="bar-count">${n}</span>
+    </div>`).join('');
+
+  // Repos
+  const byRepo = {};
+  for (const pr of open) {
+    const repo = pr.repo || pr.repository?.nameWithOwner || 'unknown';
+    if (!byRepo[repo]) byRepo[repo] = { total: 0, reviewed: 0, drafts: 0 };
+    byRepo[repo].total++;
+    if (pr.reviewStatus?.hasReviewed) byRepo[repo].reviewed++;
+    if (pr.isDraft) byRepo[repo].drafts++;
+  }
+  const sortedRepos = Object.entries(byRepo).sort((a, b) => b[1].total - a[1].total);
+  const maxPRs = Math.max(...sortedRepos.map(([, v]) => v.total), 1);
+
+  document.getElementById('repo-bars').innerHTML = sortedRepos.map(([repo, v]) => `
+    <div class="bar-row">
+      <span class="bar-label bar-label-repo" title="${repo}">${repo}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(v.total/maxPRs*100)}%"></div></div>
+      <span class="bar-count">${v.total}</span>
+    </div>`).join('');
+
+  document.querySelector('#repo-table tbody').innerHTML = sortedRepos.map(([repo, v]) => `
+    <tr>
+      <td>${repo}</td>
+      <td>${v.total}</td>
+      <td class="c-success">${v.reviewed}</td>
+      <td class="c-warning">${v.total - v.reviewed}</td>
+      <td class="c-muted">${v.drafts}</td>
+    </tr>`).join('');
+
+  // Authors
+  const byAuthor = {};
+  for (const pr of open) {
+    const author = pr.author?.login || 'unknown';
+    if (!byAuthor[author]) byAuthor[author] = { total: 0, reviewed: 0 };
+    byAuthor[author].total++;
+    if (pr.reviewStatus?.hasReviewed) byAuthor[author].reviewed++;
+  }
+  const sortedAuthors = Object.entries(byAuthor).sort((a, b) => b[1].total - a[1].total);
+  document.querySelector('#author-table tbody').innerHTML = sortedAuthors.map(([author, v]) => `
+    <tr>
+      <td>${author}</td>
+      <td>${v.total}</td>
+      <td class="c-success">${v.reviewed}</td>
+      <td class="c-warning">${v.total - v.reviewed}</td>
+    </tr>`).join('');
+
+  // Review response times
+  const cutoff = Date.now() - 90 * 86400000;
+  const responseTimes = [];
+  for (const pr of open) {
+    const rs = pr.reviewStatus;
+    if (rs?.hasReviewed && rs.submittedAt && pr.createdAt && new Date(pr.createdAt) >= cutoff) {
+      const ms = new Date(rs.submittedAt) - new Date(pr.createdAt);
+      if (ms > 0) responseTimes.push({ ms, repo: pr.repo || '', title: pr.title || `#${pr.number}`, number: pr.number });
+    }
+  }
+
+  if (responseTimes.length === 0) {
+    document.getElementById('response-time-section').classList.add('hidden');
+  } else {
+    const avgMs = responseTimes.reduce((s, r) => s + r.ms, 0) / responseTimes.length;
+    const buckets = { '< 1h': 0, '1 – 8h': 0, '8 – 24h': 0, '1 – 3d': 0, '> 3d': 0 };
+    for (const { ms } of responseTimes) {
+      const h = ms / 3600000;
+      if      (h < 1)  buckets['< 1h']++;
+      else if (h < 8)  buckets['1 – 8h']++;
+      else if (h < 24) buckets['8 – 24h']++;
+      else if (h < 72) buckets['1 – 3d']++;
+      else             buckets['> 3d']++;
+    }
+    const maxBucket = Math.max(...Object.values(buckets), 1);
+
+    document.getElementById('response-time-summary').innerHTML = `
+      <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--border);font-size:0.83rem;display:flex;gap:1.5rem">
+        <span>Avg: <strong style="color:var(--yellow)">${fmtDuration(avgMs)}</strong></span>
+        <span>Fastest: <strong class="c-success">${fmtDuration(Math.min(...responseTimes.map(r => r.ms)))}</strong></span>
+        <span>Slowest: <strong class="c-danger">${fmtDuration(Math.max(...responseTimes.map(r => r.ms)))}</strong></span>
+      </div>`;
+
+    document.getElementById('response-time-bars').innerHTML = Object.entries(buckets).map(([lbl, n]) => `
+      <div class="bar-row">
+        <span class="bar-label bar-label-age" style="width:5rem">${lbl}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(n/maxBucket*100)}%"></div></div>
+        <span class="bar-count">${n}</span>
+      </div>`).join('');
+
+    const sorted = [...responseTimes].sort((a, b) => b.ms - a.ms);
+    document.querySelector('#response-time-table tbody').innerHTML = sorted.map(r => `
+      <tr>
+        <td>#${r.number} ${r.title.slice(0, 50)}${r.title.length > 50 ? '…' : ''}</td>
+        <td>${r.repo}</td>
+        <td style="color:${r.ms < 86400000 ? 'var(--success)' : r.ms < 259200000 ? 'var(--warning)' : 'var(--danger)'}">${fmtDuration(r.ms)}</td>
+      </tr>`).join('');
+  }
+}
+
+(async () => {
+  try {
+    const prs = await load();
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('metrics-body').classList.remove('hidden');
+    render(prs);
+  } catch (err) {
+    document.getElementById('loading').classList.add('hidden');
+    const errEl = document.getElementById('error');
+    errEl.textContent = `Error: ${err.message}`;
+    errEl.classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
