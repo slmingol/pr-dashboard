@@ -1241,39 +1241,94 @@ async function loadRepos() {
 function showReposModal() {
   if (!subscribedRepos.length) return;
 
-  // Group by org
-  const byOrg = {};
-  for (const r of subscribedRepos) {
-    const [org, repo] = r.split('/');
-    if (!byOrg[org]) byOrg[org] = [];
-    byOrg[org].push(repo);
-  }
-
-  // Build PR count lookup from current data
   const prCounts = {};
-  for (const pr of allPRs) {
-    prCounts[pr.repo] = (prCounts[pr.repo] || 0) + 1;
-  }
+  for (const pr of allPRs) prCounts[pr.repo] = (prCounts[pr.repo] || 0) + 1;
 
-  const orgs = Object.keys(byOrg).sort();
-  const rows = orgs.map(org => {
-    const repoList = byOrg[org].sort().map(repo => {
-      const full = `${org}/${repo}`;
-      const count = prCounts[full];
-      const badge = count ? ` <span class="state-badge state-info" style="font-size:9px">${count} PR${count > 1 ? 's' : ''}</span>` : '';
-      return `<li style="padding:0.2rem 0;font-size:0.85rem;color:var(--text-muted)">${repo}${badge}</li>`;
-    }).join('');
-    return `
-      <div style="margin-bottom:1rem">
-        <div style="font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.35rem;padding-bottom:0.25rem;border-bottom:1px solid var(--border)">${org} <span style="font-weight:400">(${byOrg[org].length})</span></div>
-        <ul style="list-style:none;margin:0;padding:0 0 0 0.5rem">${repoList}</ul>
-      </div>`;
-  }).join('');
+  const rows = subscribedRepos.map(r => {
+    const slash = r.indexOf('/');
+    return { full: r, org: r.slice(0, slash), name: r.slice(slash + 1), prs: prCounts[r] || 0, watchOnly: watchOnlyRepos.hasOwnProperty(r) };
+  });
+
+  let sortCol = 'org';
+  let sortAsc = true;
+
+  const thStyle = 'padding:0.4rem 0.6rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);cursor:pointer;user-select:none;white-space:nowrap';
+  const thStyleC = thStyle + ';text-align:center';
 
   showModal(`
-    <h2>Watched Repos <span style="font-size:1rem;font-weight:400;color:var(--text-muted)">(${subscribedRepos.length} total)</span></h2>
-    <div style="margin-top:1rem;max-height:60vh;overflow-y:auto">${rows}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:1rem">
+      <h2 style="margin:0">Watched Repos <span id="repo-modal-count" style="font-size:0.95rem;font-weight:400;color:var(--text-muted)"></span></h2>
+      <input id="repo-search" type="text" placeholder="Filter repos…" autocomplete="off"
+        style="padding:0.35rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-deeper);color:var(--text);font-size:0.875rem;width:200px;flex-shrink:0">
+    </div>
+    <div style="overflow-y:auto;max-height:62vh">
+      <table id="repos-table" style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--surface)">
+            <th data-col="org" style="${thStyle}">Org</th>
+            <th data-col="name" style="${thStyle}">Repo</th>
+            <th data-col="prs" style="${thStyleC}">Open PRs</th>
+            <th data-col="watchOnly" style="${thStyleC}">Watch-only</th>
+          </tr>
+        </thead>
+        <tbody id="repos-tbody"></tbody>
+      </table>
+    </div>
   `);
+
+  const tdStyle = 'padding:0.35rem 0.6rem;border-bottom:1px solid var(--border);font-size:0.85rem';
+  const tdStyleC = tdStyle + ';text-align:center';
+
+  function renderRows(data) {
+    document.getElementById('repo-modal-count').textContent = `(${data.length} of ${rows.length})`;
+    document.getElementById('repos-tbody').innerHTML = data.map(r => `
+      <tr style="transition:background 0.1s" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background=''">
+        <td style="${tdStyle};color:var(--text-muted)">${r.org}</td>
+        <td style="${tdStyle}"><a href="https://github.com/${r.full}" target="_blank" style="color:var(--primary);text-decoration:none">${r.name}</a></td>
+        <td style="${tdStyleC}">${r.prs > 0 ? `<span class="state-badge state-info">${r.prs}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="${tdStyleC}">${r.watchOnly ? '<span class="state-badge state-watch">WATCH</span>' : ''}</td>
+      </tr>
+    `).join('');
+  }
+
+  function sorted(data) {
+    return [...data].sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (typeof av === 'boolean') av = av ? 1 : 0, bv = bv ? 1 : 0;
+      if (typeof av === 'number') return sortAsc ? av - bv : bv - av;
+      return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }
+
+  function filtered(term) {
+    const t = term.toLowerCase();
+    return t ? rows.filter(r => r.org.toLowerCase().includes(t) || r.name.toLowerCase().includes(t)) : rows;
+  }
+
+  function refresh() {
+    const term = document.getElementById('repo-search')?.value || '';
+    renderRows(sorted(filtered(term)));
+    // Update header sort indicators
+    document.querySelectorAll('#repos-table th[data-col]').forEach(th => {
+      const col = th.dataset.col;
+      th.textContent = th.textContent.replace(/ [▲▼]$/, '');
+      if (col === sortCol) th.textContent += sortAsc ? ' ▲' : ' ▼';
+    });
+  }
+
+  refresh();
+
+  document.getElementById('repo-search').addEventListener('input', refresh);
+  document.getElementById('repo-search').focus();
+
+  document.querySelectorAll('#repos-table th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = true; }
+      refresh();
+    });
+  });
 }
 
 document.getElementById('repos-stat').addEventListener('click', showReposModal);
