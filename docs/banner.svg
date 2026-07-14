@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="160" viewBox="0 0 900 160">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#211f1e"/>
+      <stop offset="100%" style="stop-color:#33302f"/>
+    </linearGradient>
+    <linearGradient id="accent-line" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffe033;stop-opacity:0"/>
+      <stop offset="20%" style="stop-color:#ffe033;stop-opacity:1"/>
+      <stop offset="80%" style="stop-color:#7cb3e0;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#7cb3e0;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="160" rx="12" fill="url(#bg)"/>
+  <rect width="900" height="160" rx="12" fill="none" stroke="#524e4c" stroke-width="1"/>
+
+  <!-- Accent line -->
+  <rect x="0" y="155" width="900" height="3" rx="1.5" fill="url(#accent-line)"/>
+
+  <!-- Icon area -->
+  <text x="52" y="100" font-size="54" text-anchor="middle" dominant-baseline="middle">🔀</text>
+
+  <!-- Title -->
+  <text x="96" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="42" font-weight="700" fill="#ececec" dominant-baseline="middle">PR Dashboard</text>
+
+  <!-- Subtitle -->
+  <text x="98" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="16" fill="#a8a29e" dominant-baseline="middle">
+    GitHub pull request review tracker for large repo sets
+  </text>
+
+  <!-- Decorative PR cards (right side) -->
+  <!-- Card 1 -->
+  <rect x="610" y="28" width="260" height="32" rx="6" fill="#3d3937" stroke="#524e4c" stroke-width="1"/>
+  <rect x="622" y="39" width="8" height="8" rx="4" fill="#6ec978"/>
+  <text x="638" y="47" font-family="monospace" font-size="11" fill="#a8a29e" dominant-baseline="middle">#412 feat: rate limiting middleware</text>
+  <rect x="836" y="35" width="28" height="16" rx="4" fill="#1a3a1a"/>
+  <text x="850" y="44" font-family="monospace" font-size="9" fill="#6ec978" text-anchor="middle" dominant-baseline="middle">OPEN</text>
+
+  <!-- Card 2 -->
+  <rect x="610" y="68" width="260" height="32" rx="6" fill="#3d3937" stroke="#524e4c" stroke-width="1"/>
+  <rect x="622" y="79" width="8" height="8" rx="4" fill="#7cb3e0"/>
+  <text x="638" y="87" font-family="monospace" font-size="11" fill="#a8a29e" dominant-baseline="middle">#408 fix: memory leak in conn pool</text>
+  <rect x="824" y="75" width="40" height="16" rx="4" fill="#1a2a3a"/>
+  <text x="844" y="84" font-family="monospace" font-size="8" fill="#7cb3e0" text-anchor="middle" dominant-baseline="middle">REVIEWED</text>
+
+  <!-- Card 3 -->
+  <rect x="610" y="108" width="260" height="32" rx="6" fill="#3d3937" stroke="#524e4c" stroke-width="1"/>
+  <rect x="622" y="119" width="8" height="8" rx="4" fill="#d4956a"/>
+  <text x="638" y="127" font-family="monospace" font-size="11" fill="#a8a29e" dominant-baseline="middle">#89  feat: OAuth2 PKCE flow</text>
+  <rect x="810" y="115" width="54" height="16" rx="4" fill="#3a1a1a"/>
+  <text x="837" y="124" font-family="monospace" font-size="7.5" fill="#e87c73" text-anchor="middle" dominant-baseline="middle">CHANGES REQ</text>
+</svg>

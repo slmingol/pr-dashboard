@@ -341,7 +341,7 @@ h1 {
 /* Progress Bar */
 .progress-container {
   position: fixed;
-  top: 3.5rem;
+  top: 50vh;
   left: 50%;
   transform: translateX(-50%);
   width: min(480px, 90vw);

@@ -1,4 +1,6 @@
-# PR Dashboard
+<p align="center">
+  <img src="docs/banner.svg" alt="PR Dashboard" width="900"/>
+</p>
 
 A containerized pull request dashboard that integrates with [`ghreport`](https://github.com/slmingol/ghreport) and the GitHub CLI to provide a consolidated view of all monitored PRs with review tracking and management features.
 
