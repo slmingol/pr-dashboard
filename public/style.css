@@ -33,6 +33,7 @@
   --btn-hover: #d9d1ca;
   --btn-bg: rgba(200, 190, 182, 0.12);
   --btn-bg-hover: rgba(200, 190, 182, 0.22);
+  --yellow: #ffe033;
   --radius: 8px;
   --radius-sm: 4px;
 }
@@ -48,6 +49,7 @@
   --surface-hover: #f8fafc;
   --text: #0f172a;
   --text-muted: #64748b;
+  --yellow: #b58f00;
   --border: #e2e8f0;
 }
 
@@ -943,27 +945,27 @@ label {
   }
 }
 
-.app-version-sep {
-  color: var(--primary);
-  opacity: 0.4;
-  font-size: 0.9em;
+.perf-bar {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  color: var(--yellow);
+  text-align: center;
+  flex: 1;
+  padding: 0 1rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-version {
   position: fixed;
   bottom: 0.75rem;
   right: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.94rem;
+  font-size: 0.75rem;
   font-family: var(--font-mono, monospace);
-  color: var(--primary);
-  background: var(--surface);
-  border: 1px solid var(--primary);
-  border-radius: var(--radius);
-  padding: 0.3rem 0.65rem;
-  box-shadow: var(--shadow);
+  color: var(--text-muted);
   pointer-events: none;
   user-select: none;
 }

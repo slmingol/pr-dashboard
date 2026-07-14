@@ -228,7 +228,7 @@ async function fetchPRs() {
         if (total > 0) {
           parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
         }
-        document.getElementById('load-timing').textContent = parts.join('  ·  ');
+        document.getElementById('perf-bar').textContent = parts.join('  ·  ');
       }
 
       // Track review state changes for debugging
