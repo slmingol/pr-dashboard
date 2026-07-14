@@ -5,6 +5,7 @@ let watchOnlyRepos = {};
 let renderLimit = 25;
 let selectedPRId = null;
 let subscribedRepos = [];
+let lastRefreshWallMs = null;
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -221,6 +222,9 @@ async function fetchPRs() {
         const total = (p.cacheHits ?? 0) + (p.cacheMisses ?? 0);
         const allCached = p.cacheMisses === 0;
         const parts = [];
+        if (lastRefreshWallMs != null) {
+          parts.push(`refresh: ${fmt(lastRefreshWallMs)}`);
+        }
         if (!allCached && p.ghFetchMs != null) {
           const avgStr = p.ghSamples > 1 ? ` · avg: ${fmt(p.ghAvgMs)}` : '';
           parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
@@ -978,7 +982,8 @@ async function refreshGhReport() {
   const progressFill = document.querySelector('.progress-fill');
   const progressText = document.querySelector('.progress-text');
   const originalText = btn.textContent;
-  
+  const wallStart = performance.now();
+
   try {
     btn.disabled = true;
     btn.textContent = '⏳ Running...';
@@ -1014,8 +1019,9 @@ async function refreshGhReport() {
         eventSource.close();
         showToast(`✓ Refreshed PR data. Found ${data.prCount} PRs.`, 'success', 'Data Refreshed');
         // Automatically reload the PR list after successful refresh
-        setTimeout(() => {
-          fetchPRs();
+        setTimeout(async () => {
+          await fetchPRs();
+          lastRefreshWallMs = Math.round(performance.now() - wallStart);
           progressContainer.classList.add('hidden');
           btn.disabled = false;
           btn.textContent = originalText;
