@@ -947,9 +947,9 @@ label {
   position: fixed;
   bottom: 0.75rem;
   right: 1rem;
-  font-size: 0.8rem;
+  font-size: 1.6rem;
   color: var(--text-muted);
-  opacity: 0.85;
+  opacity: 1;
   pointer-events: none;
   user-select: none;
 }
