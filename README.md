@@ -2,6 +2,52 @@
 
 A containerized pull request dashboard that integrates with [`ghreport`](https://github.com/slmingol/ghreport) and the GitHub CLI to provide a consolidated view of all monitored PRs with review tracking and management features.
 
+## Screenshots
+
+### Main dashboard
+
+![Main dashboard](docs/screenshots/main-dashboard.png)
+
+PRs grouped by repository, with review status badges, metadata, and action buttons on each card.
+
+---
+
+### Stats bar
+
+![Stats bar](docs/screenshots/stats-bar.png)
+
+Real-time counts across Total, Visible, Hidden, Filtered, Drafts, and Repos. The **Repos** tile is clickable.
+
+---
+
+### Filter bar
+
+![Filter bar](docs/screenshots/filters-bar.png)
+
+Keyword search, state filter, Show Hidden / Show Drafts toggles, and a Reset button. All preferences persist across page loads.
+
+---
+
+### Watched repos modal
+
+![Repos modal](docs/screenshots/repos-modal.png)
+
+Sortable table of all watched repos with open PR counts and watch-only status. Click any column header to sort.
+
+![Repos modal with search](docs/screenshots/repos-modal-search.png)
+
+Type in the filter box to narrow by org or repo name. Count updates to show matched / total.
+
+---
+
+### Keyboard shortcuts
+
+![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png)
+
+Press `?` or click the `⌨` button in the header to open the reference modal.
+
+---
+
 ## Features
 
 ### Core
@@ -10,8 +56,8 @@ A containerized pull request dashboard that integrates with [`ghreport`](https:/
 - **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
 - **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage
 - **Watch-only repos** -- mark repos as view-only to suppress review actions (useful for monitoring repos you don't participate in)
-- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), or hidden status
-- **Statistics bar** -- real-time counts for Total, Visible, Hidden, and Filtered PRs
+- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, or draft status
+- **Statistics bar** -- real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
 
 ### Review workflow
 
@@ -38,6 +84,7 @@ A containerized pull request dashboard that integrates with [`ghreport`](https:/
 - Compact single-line PR cards for maximum density
 - Toast notifications for actions
 - Keyboard shortcuts for full mouse-free operation (see below)
+- Filter preferences (search, state, show-hidden, show-drafts) persist across page loads
 
 ## Keyboard Shortcuts
 
@@ -139,10 +186,10 @@ make clean     # remove container and image
 
 ```yaml
 volumes:
-  - ~/.config/gh:/root/.config/gh:ro          # gh CLI auth
+  - ~/.config/gh:/root/.config/gh:ro              # gh CLI auth
   - ~/.config/ghreport:/root/.config/ghreport:ro  # ghreport config
-  - ~/ghreport-output:/data                   # ghreport output directory
-  - ~/.gitconfig:/root/.gitconfig:ro          # git config for checkout
+  - ~/ghreport-output:/data                       # ghreport output directory
+  - ~/.gitconfig:/root/.gitconfig:ro              # git config for checkout
 ```
 
 ### Browser storage (localStorage)
@@ -153,6 +200,10 @@ volumes:
 | `hiddenPRs` | Array of `"owner/repo#number"` strings |
 | `watchOnlyRepos` | Object keyed by `"owner/repo"` |
 | `diffView` | `unified` or `split` |
+| `filterSearch` | Last search term |
+| `filterState` | Last state filter value |
+| `filterShowHidden` | Last show-hidden checkbox state |
+| `filterShowDrafts` | Last show-drafts checkbox state |
 
 ## Architecture
 
@@ -171,6 +222,7 @@ volumes:
 |--------|------|-------------|
 | GET | `/api/prs` | All PRs with review status |
 | GET | `/api/user` | Current authenticated GitHub user |
+| GET | `/api/repos` | Subscribed repo list from ghreport config |
 | GET | `/api/pr/:owner/:repo/:number` | PR details |
 | GET | `/api/pr/:owner/:repo/:number/diff` | PR diff |
 | POST | `/api/pr/:owner/:repo/:number/checkout` | Checkout branch locally |
@@ -183,17 +235,19 @@ volumes:
 
 ```
 pr-dashboard/
+├── docs/
+│   └── screenshots/        # README screenshots
 ├── public/
-│   ├── index.html       # Main HTML
-│   ├── app.js           # Frontend logic
-│   └── style.css        # Theming and layout
-├── server.js            # Express backend
-├── docker-compose.yml   # Container orchestration
+│   ├── index.html          # Main HTML
+│   ├── app.js              # Frontend logic
+│   └── style.css           # Theming and layout
+├── server.js               # Express backend
+├── docker-compose.yml      # Container orchestration
 ├── docker-compose.override.yml  # Dev overrides (live reload)
-├── Dockerfile           # Container build
-├── Makefile             # Build targets
-├── package.json         # Node.js dependencies
-└── .env.example         # Environment template
+├── Dockerfile              # Container build
+├── Makefile                # Build targets
+├── package.json            # Node.js dependencies
+└── .env.example            # Environment template
 ```
 
 ## Development
@@ -227,6 +281,7 @@ node server.js
 - Ensure `~/.config/ghreport/config.yaml` is mounted and contains the repo under `subscribedRepos`
 - Restart container after config changes: `make restart`
 - Container logs will confirm: `ghreport: using N repos from /root/.config/ghreport/config.yaml`
+- Click the **Repos** stat tile to verify which repos the dashboard knows about
 
 **Container won't start**
 - `podman ps -a` and `podman logs pr-dashboard --tail 50`
