@@ -213,7 +213,16 @@ async function fetchPRs() {
     
     if (data.success) {
       allPRs = data.prs;
-      
+
+      // Update load timing display
+      if (data.loadTimeMs !== undefined) {
+        const fmt = ms => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+        const avgLabel = data.loadSamples > 1
+          ? ` · avg(${data.loadSamples}): ${fmt(data.avgLoadTimeMs)}`
+          : '';
+        document.getElementById('load-timing').textContent = `last: ${fmt(data.loadTimeMs)}${avgLabel}`;
+      }
+
       // Track review state changes for debugging
       allPRs.forEach(pr => {
         const prId = `${pr.repo}#${pr.number}`;

@@ -13,6 +13,9 @@ const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, tim
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
 const CACHE_FILE = process.env.REVIEW_CACHE_FILE || '/data/review-cache.json';
 
+// Ring buffer of the last 10 /api/prs load durations (ms)
+const loadTimesMs = [];
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -385,6 +388,7 @@ app.get('/api/user', async (req, res) => {
 });
 
 app.get('/api/prs', async (req, res) => {
+  const loadStart = Date.now();
   try {
     // Try ghreport file first, then try running ghreport command
     let prs = await loadPRsFromGhReport();
@@ -459,7 +463,12 @@ app.get('/api/prs', async (req, res) => {
       });
     }
     
-    res.json({ success: true, prs, currentUser });
+    const loadTimeMs = Date.now() - loadStart;
+    loadTimesMs.push(loadTimeMs);
+    if (loadTimesMs.length > 10) loadTimesMs.shift();
+    const avgLoadTimeMs = Math.round(loadTimesMs.reduce((a, b) => a + b, 0) / loadTimesMs.length);
+    console.log(`/api/prs completed in ${loadTimeMs}ms (avg ${avgLoadTimeMs}ms over last ${loadTimesMs.length})`);
+    res.json({ success: true, prs, currentUser, loadTimeMs, avgLoadTimeMs, loadSamples: loadTimesMs.length });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
