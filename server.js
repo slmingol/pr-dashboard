@@ -13,8 +13,8 @@ const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, tim
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
 const CACHE_FILE = process.env.REVIEW_CACHE_FILE || '/data/review-cache.json';
 
-// Ring buffer of the last 10 /api/prs load durations (ms)
-const loadTimesMs = [];
+// Ring buffer of the last 10 GitHub API (GraphQL batch) fetch durations (ms)
+const ghFetchTimesMs = [];
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -388,7 +388,6 @@ app.get('/api/user', async (req, res) => {
 });
 
 app.get('/api/prs', async (req, res) => {
-  const loadStart = Date.now();
   try {
     // Try ghreport file first, then try running ghreport command
     let prs = await loadPRsFromGhReport();
@@ -401,6 +400,8 @@ app.get('/api/prs', async (req, res) => {
     const currentUser = await getCurrentUser();
     console.log(`Current authenticated user: ${currentUser}`);
     
+    let hitCount = 0, missCount = 0, ghFetchMs = 0;
+
     if (currentUser) {
       const now = Date.now();
 
@@ -416,11 +417,15 @@ app.get('/api/prs', async (req, res) => {
           misses.push(pr);
         }
       }
-      console.log(`Review cache: ${Object.keys(hits).length} hits, ${misses.length} misses`);
+      hitCount = Object.keys(hits).length;
+      missCount = misses.length;
+      console.log(`Review cache: ${hitCount} hits, ${missCount} misses`);
 
       // Fetch all misses in a single GraphQL call
+      const ghFetchStart = Date.now();
       const batchData = await fetchReviewStatusBatch(misses, currentUser);
       const batchTimestamp = Date.now();
+      ghFetchMs = misses.length > 0 ? batchTimestamp - ghFetchStart : 0;
 
       // For any PR the batch didn't return (deleted/private), fall back to individual call
       const stillMissing = misses.filter(pr => !batchData[`${pr.repo}#${pr.number}`]);
@@ -446,7 +451,11 @@ app.get('/api/prs', async (req, res) => {
       }
 
       // Save updated cache to disk (non-blocking)
-      if (misses.length > 0) saveCacheToDisk();
+      if (misses.length > 0) {
+        saveCacheToDisk();
+        ghFetchTimesMs.push(ghFetchMs);
+        if (ghFetchTimesMs.length > 10) ghFetchTimesMs.shift();
+      }
 
       // Apply review statuses to PRs
       prs = prs.map(pr => {
@@ -463,12 +472,19 @@ app.get('/api/prs', async (req, res) => {
       });
     }
     
-    const loadTimeMs = Date.now() - loadStart;
-    loadTimesMs.push(loadTimeMs);
-    if (loadTimesMs.length > 10) loadTimesMs.shift();
-    const avgLoadTimeMs = Math.round(loadTimesMs.reduce((a, b) => a + b, 0) / loadTimesMs.length);
-    console.log(`/api/prs completed in ${loadTimeMs}ms (avg ${avgLoadTimeMs}ms over last ${loadTimesMs.length})`);
-    res.json({ success: true, prs, currentUser, loadTimeMs, avgLoadTimeMs, loadSamples: loadTimesMs.length });
+    const ghAvgMs = ghFetchTimesMs.length > 0
+      ? Math.round(ghFetchTimesMs.reduce((a, b) => a + b, 0) / ghFetchTimesMs.length)
+      : null;
+    res.json({
+      success: true, prs, currentUser,
+      perf: {
+        ghFetchMs: missCount > 0 ? ghFetchMs : null,
+        ghAvgMs,
+        ghSamples: ghFetchTimesMs.length,
+        cacheHits: hitCount,
+        cacheMisses: missCount,
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

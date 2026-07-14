@@ -214,13 +214,21 @@ async function fetchPRs() {
     if (data.success) {
       allPRs = data.prs;
 
-      // Update load timing display
-      if (data.loadTimeMs !== undefined) {
+      // Update GitHub API timing display
+      if (data.perf) {
+        const p = data.perf;
         const fmt = ms => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
-        const avgLabel = data.loadSamples > 1
-          ? ` · avg(${data.loadSamples}): ${fmt(data.avgLoadTimeMs)}`
-          : '';
-        document.getElementById('load-timing').textContent = `last: ${fmt(data.loadTimeMs)}${avgLabel}`;
+        const total = (p.cacheHits ?? 0) + (p.cacheMisses ?? 0);
+        const allCached = p.cacheMisses === 0;
+        const parts = [];
+        if (!allCached && p.ghFetchMs != null) {
+          const avgStr = p.ghSamples > 1 ? ` · avg: ${fmt(p.ghAvgMs)}` : '';
+          parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
+        }
+        if (total > 0) {
+          parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
+        }
+        document.getElementById('load-timing').textContent = parts.join('  ·  ');
       }
 
       // Track review state changes for debugging
