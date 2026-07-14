@@ -1390,7 +1390,7 @@ function computeAnalytics(prs) {
     else                   ageBuckets['>1w']++;
 
     // Review response time: PR created → review submitted (last 90 days only)
-    const cutoff = now - 90 * 86400000;
+    const cutoff = now - 45 * 86400000;
     if (rs?.hasReviewed && rs.submittedAt && pr.createdAt && new Date(pr.createdAt) >= cutoff) {
       const ms = new Date(rs.submittedAt) - new Date(pr.createdAt);
       if (ms > 0) responseTimes.push({ ms, repo, title: pr.title, number: pr.number });

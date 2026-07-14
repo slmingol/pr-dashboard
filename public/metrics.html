@@ -134,7 +134,7 @@
 
     <!-- Review response time -->
     <div class="metrics-section" id="response-time-section">
-      <div class="metrics-section-title">Review Response Time — last 90 days (PR opened → your review)</div>
+      <div class="metrics-section-title">Review Response Time — last 45 days (PR opened → your review)</div>
       <div id="response-time-bars"></div>
       <table class="full-table" id="response-time-table" style="margin-top:0.75rem">
         <thead><tr><th>PR</th><th>Repo</th><th>Response time</th></tr></thead>
@@ -288,7 +288,7 @@ function render(prs) {
     </tr>`).join('');
 
   // Review response times
-  const cutoff = Date.now() - 90 * 86400000;
+  const cutoff = Date.now() - 45 * 86400000;
   const responseTimes = [];
   for (const pr of open) {
     const rs = pr.reviewStatus;
