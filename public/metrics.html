@@ -23,9 +23,9 @@
 
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 1rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
     }
     .metrics-card {
       background: var(--surface);
@@ -34,20 +34,19 @@
       padding: 1rem 1.25rem;
     }
     .metrics-card-title {
-      font-size: 0.72rem;
+      font-size: 0.68rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.07em;
       color: var(--text-muted);
-      margin-bottom: 0.85rem;
+      margin-bottom: 0.6rem;
     }
     .metrics-big-stat {
-      font-size: 2.5rem;
+      font-size: 2.6rem;
       font-weight: 700;
-      color: var(--text);
       line-height: 1;
     }
-    .metrics-big-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.3rem; }
+    .metrics-big-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem; }
 
     .metrics-section {
       background: var(--surface);
@@ -57,10 +56,10 @@
       margin-bottom: 1rem;
     }
     .metrics-section-title {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       color: var(--text-muted);
       margin-bottom: 1rem;
     }
@@ -68,29 +67,39 @@
     .metrics-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     @media (max-width: 700px) { .metrics-two-col { grid-template-columns: 1fr; } }
 
-    .stat-pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .stat-pill {
-      display: flex; align-items: center; gap: 0.45rem;
-      background: var(--surface-hover); border: 1px solid var(--border);
-      border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.82rem;
+    /* Donut chart */
+    .donut-wrap { display: flex; align-items: center; gap: 1.75rem; }
+    .donut-legend { display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
+    .legend-row {
+      display: flex; align-items: center; gap: 0.55rem;
+      font-size: 0.83rem;
     }
-    .stat-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .stat-pill-count { font-weight: 700; color: var(--text); }
-    .stat-pill-label { color: var(--text-muted); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-count { font-weight: 700; color: var(--text); min-width: 1.6rem; text-align: right; }
+    .legend-label { color: var(--text-muted); }
+    .legend-pct { margin-left: auto; font-size: 0.72rem; color: var(--text-muted); }
 
-    .bar-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.22rem 0; font-size: 0.82rem; }
-    .bar-label { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
-    .bar-label-repo { width: 11rem; overflow: hidden; text-overflow: ellipsis; }
-    .bar-label-age  { width: 4.5rem; }
-    .bar-track { flex: 1; height: 10px; background: var(--surface-hover); border-radius: 5px; overflow: hidden; }
-    .bar-fill { height: 100%; border-radius: 5px; background: var(--primary); }
-    .bar-count { color: var(--text-muted); width: 2.5rem; text-align: right; font-size: 0.78rem; flex-shrink: 0; }
+    /* Coverage bar */
+    .coverage-bar-wrap { display: flex; height: 22px; border-radius: 5px; overflow: hidden; width: 100%; }
+    .coverage-bar-seg { transition: width 0.4s ease; }
+    .coverage-labels { display: flex; justify-content: space-between; margin-top: 0.4rem; font-size: 0.8rem; }
+    .coverage-label-l { font-weight: 600; }
+    .coverage-label-r { font-weight: 600; }
 
+    /* Bar charts (CSS-based, fixed height) */
+    .bchart-row { display:flex; align-items:center; gap:0.5rem; padding:0.22rem 0; font-size:0.82rem; }
+    .bchart-label { color:var(--text-muted); white-space:nowrap; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; }
+    .bchart-track { flex:1; height:11px; background:var(--surface-hover); border-radius:6px; overflow:hidden; display:flex; min-width:0; }
+    .bchart-fill { height:100%; flex-shrink:0; }
+    .bchart-count { color:var(--text-muted); min-width:2rem; text-align:right; font-size:0.8rem; flex-shrink:0; }
+    .bchart-pct { color:var(--text-muted); min-width:2.8rem; font-size:0.75rem; flex-shrink:0; }
+
+    /* Full tables */
     .full-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
     .full-table th {
       text-align: left; color: var(--text-muted); font-weight: 500;
-      padding: 0.25rem 0.5rem 0.5rem; border-bottom: 1px solid var(--border);
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem 0.45rem; border-bottom: 1px solid var(--border);
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
     }
     .full-table td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--surface-hover); color: var(--text-muted); }
     .full-table td:first-child { color: var(--text); font-family: monospace; font-size: 0.8rem; }
@@ -102,6 +111,17 @@
     .c-warning  { color: var(--warning); }
     .c-primary  { color: var(--primary); }
     .c-muted    { color: var(--text-muted); }
+
+    .response-summary-row {
+      display: flex; gap: 2.5rem;
+      padding: 0.5rem 0 0.85rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.85rem;
+      font-size: 0.85rem;
+    }
+    .response-summary-item strong { font-size: 1.15rem; font-weight: 700; display: block; }
+    .response-summary-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.1rem; }
+    .no-data { color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0; }
   </style>
 </head>
 <body>
@@ -115,69 +135,64 @@
   <div id="error" class="error hidden"></div>
 
   <div id="metrics-body" class="hidden">
-    <!-- Summary pills -->
     <div class="metrics-grid" id="summary-grid"></div>
 
+    <div class="metrics-section">
+      <div class="metrics-section-title">Review Coverage — Open PRs</div>
+      <div id="coverage-section"></div>
+    </div>
+
     <div class="metrics-two-col">
-      <!-- Review activity -->
       <div class="metrics-section">
-        <div class="metrics-section-title">Your Review Activity (open PRs)</div>
-        <div class="stat-pill-row" id="activity-pills"></div>
-        <div id="response-time-summary"></div>
+        <div class="metrics-section-title">Your Review Activity</div>
+        <div id="activity-chart"></div>
       </div>
-      <!-- Age distribution -->
       <div class="metrics-section">
         <div class="metrics-section-title">Age of Open PRs</div>
-        <div id="age-bars"></div>
+        <div id="age-chart"></div>
       </div>
     </div>
 
-    <!-- Review response time -->
-    <div class="metrics-section" id="response-time-section">
+    <div class="metrics-section">
+      <div class="metrics-section-title">Open PRs by Repo — reviewed vs pending</div>
+      <div id="repo-chart"></div>
+    </div>
+
+    <div class="metrics-section" id="response-section">
       <div class="metrics-section-title">Review Response Time — last 45 days (PR opened → your review)</div>
-      <div id="response-time-bars"></div>
-      <table class="full-table" id="response-time-table" style="margin-top:0.75rem">
-        <thead><tr><th>PR</th><th>Repo</th><th>Response time</th></tr></thead>
+      <div id="response-summary-row" class="response-summary-row"></div>
+      <div id="response-chart"></div>
+      <table class="full-table" id="response-table" style="margin-top:0.9rem">
+        <thead><tr><th>PR</th><th>Repo</th><th>Response</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
 
-    <!-- PRs by repo bar chart -->
-    <div class="metrics-section">
-      <div class="metrics-section-title">Open PRs by Repo</div>
-      <div id="repo-bars"></div>
-    </div>
-
-    <!-- Author breakdown -->
-    <div class="metrics-section">
-      <div class="metrics-section-title">Author Breakdown (open PRs)</div>
-      <table class="full-table" id="author-table">
-        <thead><tr><th>Author</th><th>Open PRs</th><th>You reviewed</th><th>Pending</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <!-- Full repo table -->
-    <div class="metrics-section">
-      <div class="metrics-section-title">All Repos</div>
-      <table class="full-table" id="repo-table">
-        <thead><tr><th>Repo</th><th>Open</th><th>Reviewed</th><th>Pending</th><th>Drafts</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <div class="metrics-two-col">
+      <div class="metrics-section">
+        <div class="metrics-section-title">Author Breakdown (open PRs)</div>
+        <table class="full-table" id="author-table">
+          <thead><tr><th>Author</th><th>PRs</th><th>Reviewed</th><th>Pending</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="metrics-section">
+        <div class="metrics-section-title">All Repos</div>
+        <table class="full-table" id="repo-table">
+          <thead><tr><th>Repo</th><th>Open</th><th>Reviewed</th><th>Pending</th><th>Draft</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 <script>
-async function load() {
-  const res = await fetch('/api/prs');
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error);
-  return data.prs;
+function getCssVar(n) {
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 }
 
-function ageDays(pr) {
-  if (!pr.updatedAt) return 0;
-  return (Date.now() - new Date(pr.updatedAt)) / 86400000;
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function fmtDuration(ms) {
@@ -186,91 +201,225 @@ function fmtDuration(ms) {
   return `${(ms / 86400000).toFixed(1)}d`;
 }
 
+function ageDays(pr) {
+  if (!pr.updatedAt) return 0;
+  return (Date.now() - new Date(pr.updatedAt)) / 86400000;
+}
+
+// SVG donut chart — segments: [{value, color, label}]
+function svgDonut(segments, size) {
+  size = size || 130;
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  const cx = size / 2, cy = size / 2;
+  const R = size * 0.43, r = size * 0.27;
+
+  if (total === 0) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${cx}" cy="${cy}" r="${(R+r)/2}" fill="none" stroke="var(--border)" stroke-width="${R - r}"/>
+      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="var(--text-muted)" font-size="11" font-family="inherit">No data</text>
+    </svg>`;
+  }
+
+  let angle = -Math.PI / 2;
+  const paths = [];
+
+  for (const seg of segments) {
+    if (seg.value === 0) continue;
+
+    if (seg.value === total) {
+      // Full ring — draw as two arcs to avoid degenerate endpoint
+      const mid = angle + Math.PI;
+      const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+      const xm = cx + R * Math.cos(mid),   ym = cy + R * Math.sin(mid);
+      const ix1 = cx + r * Math.cos(angle), iy1 = cy + r * Math.sin(angle);
+      const ixm = cx + r * Math.cos(mid),   iym = cy + r * Math.sin(mid);
+      paths.push(
+        `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 1 1 ${xm.toFixed(2)} ${ym.toFixed(2)} L ${ixm.toFixed(2)} ${iym.toFixed(2)} A ${r} ${r} 0 1 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z M ${xm.toFixed(2)} ${ym.toFixed(2)} A ${R} ${R} 0 1 1 ${x1.toFixed(2)} ${y1.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${r} ${r} 0 1 0 ${ixm.toFixed(2)} ${iym.toFixed(2)} Z" fill="${seg.color}"/>`
+      );
+      break;
+    }
+
+    const sweep = (seg.value / total) * 2 * Math.PI;
+    const end = angle + sweep;
+    const x1  = cx + R * Math.cos(angle), y1  = cy + R * Math.sin(angle);
+    const x2  = cx + R * Math.cos(end),   y2  = cy + R * Math.sin(end);
+    const ix1 = cx + r * Math.cos(angle), iy1 = cy + r * Math.sin(angle);
+    const ix2 = cx + r * Math.cos(end),   iy2 = cy + r * Math.sin(end);
+    const large = sweep > Math.PI ? 1 : 0;
+    paths.push(
+      `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z" fill="${seg.color}"/>`
+    );
+    angle = end;
+  }
+
+  const numSz = Math.round(size * 0.19);
+  const lblSz = Math.round(size * 0.095);
+
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    ${paths.join('')}
+    <text x="${cx}" y="${cy - 2}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="${numSz}" font-weight="700" font-family="inherit">${total}</text>
+    <text x="${cx}" y="${cy + numSz * 0.85}" text-anchor="middle" dominant-baseline="middle" fill="var(--text-muted)" font-size="${lblSz}" font-family="inherit">total</text>
+  </svg>`;
+}
+
+// Horizontal bar chart using CSS (fixed height, no SVG scaling issues)
+// rows: [{label, shortLabel?, value, color, value2?, color2?}]
+function htmlBarChart(rows, opts) {
+  const { labelW = '90px', showPct = true, maxVal } = opts || {};
+  const total = rows.reduce((s, r) => s + (r.value || 0), 0);
+  const max   = maxVal != null ? maxVal : Math.max(...rows.map(r => (r.value || 0) + (r.value2 || 0)), 1);
+
+  return rows.map(row => {
+    const v1  = row.value  || 0;
+    const v2  = row.value2 || 0;
+    const pct1 = Math.round(v1 / max * 100);
+    const pct2 = Math.round(v2 / max * 100);
+    const pctOfTotal = total > 0 ? Math.round(v1 / total * 100) : 0;
+    const count = (v1 + v2) || v1;
+
+    const fills = [];
+    if (v1 > 0) fills.push(`<div class="bchart-fill" style="width:${pct1}%;background:${row.color}"></div>`);
+    if (v2 > 0) fills.push(`<div class="bchart-fill" style="width:${pct2}%;background:${row.color2}"></div>`);
+
+    return `<div class="bchart-row">
+      <span class="bchart-label" style="width:${labelW}" title="${esc(row.label)}">${esc(row.shortLabel || row.label)}</span>
+      <div class="bchart-track">${fills.join('')}</div>
+      <span class="bchart-count">${count}</span>
+      ${showPct && total > 0 ? `<span class="bchart-pct">${pctOfTotal}%</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function load() {
+  const res = await fetch('/api/prs');
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  return data.prs;
+}
+
 function render(prs) {
+  // Resolve CSS color variables once so SVG fill attrs use real hex values
+  const C = {
+    success: getCssVar('--success'),
+    danger:  getCssVar('--danger'),
+    warning: getCssVar('--warning'),
+    primary: getCssVar('--primary'),
+    muted:   getCssVar('--text-muted'),
+    text:    getCssVar('--text'),
+    blue:    '#3b82f6',
+    orange:  '#f97316',
+  };
+
   const open   = prs.filter(p => p.state === 'OPEN');
   const closed = prs.filter(p => p.state === 'CLOSED');
   const merged = prs.filter(p => p.state === 'MERGED');
   const drafts = open.filter(p => p.isDraft);
 
-  // Summary grid
-  const summaryData = [
-    { label: 'Open PRs',   value: open.length,   color: 'var(--success)' },
-    { label: 'Drafts',     value: drafts.length,  color: 'var(--text-muted)' },
-    { label: 'Merged',     value: merged.length,  color: 'var(--primary)' },
-    { label: 'Closed',     value: closed.length,  color: 'var(--danger)' },
-  ];
-  document.getElementById('summary-grid').innerHTML = summaryData.map(s => `
+  // ── Summary cards ─────────────────────────────────────────────────
+  document.getElementById('summary-grid').innerHTML = [
+    { label: 'Open PRs', value: open.length,   color: C.success },
+    { label: 'Drafts',   value: drafts.length,  color: C.muted   },
+    { label: 'Merged',   value: merged.length,  color: C.primary },
+    { label: 'Closed',   value: closed.length,  color: C.danger  },
+  ].map(s => `
     <div class="metrics-card">
       <div class="metrics-card-title">${s.label}</div>
       <div class="metrics-big-stat" style="color:${s.color}">${s.value}</div>
     </div>`).join('');
 
-  // Review activity
+  // ── Review activity breakdown ─────────────────────────────────────
   const act = { APPROVED: 0, CHANGES_REQUESTED: 0, COMMENTED: 0, pending: 0 };
   for (const pr of open) {
     const rs = pr.reviewStatus;
     if (rs?.hasReviewed && rs.state) act[rs.state] = (act[rs.state] || 0) + 1;
     else act.pending++;
   }
-  const pills = [
-    { label: 'Approved',          count: act.APPROVED,          color: 'var(--success)' },
-    { label: 'Changes requested', count: act.CHANGES_REQUESTED, color: 'var(--danger)'  },
-    { label: 'Commented',         count: act.COMMENTED,         color: 'var(--warning)' },
-    { label: 'Pending',           count: act.pending,           color: 'var(--primary)' },
-  ];
-  document.getElementById('activity-pills').innerHTML = pills.map(p => `
-    <div class="stat-pill">
-      <span class="stat-pill-dot" style="background:${p.color}"></span>
-      <span class="stat-pill-count">${p.count}</span>
-      <span class="stat-pill-label">${p.label}</span>
-    </div>`).join('');
+  const actTotal = open.length;
+  const reviewed = actTotal - act.pending;
 
-  // Age bars
-  const ages = { '< 1 day': 0, '1 – 3 days': 0, '3 – 7 days': 0, '> 1 week': 0 };
+  // ── Coverage bar ───────────────────────────────────────────────────
+  const covPct  = actTotal > 0 ? Math.round(reviewed / actTotal * 100) : 0;
+  const pendPct = 100 - covPct;
+  document.getElementById('coverage-section').innerHTML = actTotal === 0
+    ? '<div class="no-data">No open PRs.</div>'
+    : `<div class="coverage-bar-wrap">
+        <div class="coverage-bar-seg" style="width:${covPct}%;background:${C.success}"></div>
+        <div class="coverage-bar-seg" style="width:${pendPct}%;background:${C.orange}"></div>
+       </div>
+       <div class="coverage-labels">
+         <span class="coverage-label-l" style="color:${C.success}">${reviewed} reviewed (${covPct}%)</span>
+         <span class="coverage-label-r" style="color:${C.orange}">${act.pending} pending (${pendPct}%)</span>
+       </div>`;
+
+  // ── Activity donut ─────────────────────────────────────────────────
+  const actSegments = [
+    { label: 'Approved',          value: act.APPROVED,          color: C.success },
+    { label: 'Changes requested', value: act.CHANGES_REQUESTED, color: C.danger  },
+    { label: 'Commented',         value: act.COMMENTED,         color: C.warning },
+    { label: 'Pending review',    value: act.pending,           color: C.blue    },
+  ];
+  document.getElementById('activity-chart').innerHTML = `
+    <div class="donut-wrap">
+      <div style="flex-shrink:0">${svgDonut(actSegments, 130)}</div>
+      <div class="donut-legend">${actSegments.map(s => {
+        const pct = actTotal > 0 ? Math.round(s.value / actTotal * 100) : 0;
+        return `<div class="legend-row">
+          <span class="legend-dot" style="background:${s.color}"></span>
+          <span class="legend-count">${s.value}</span>
+          <span class="legend-label">${s.label}</span>
+          <span class="legend-pct">${pct}%</span>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+
+  // ── Age bars ───────────────────────────────────────────────────────
+  const ageBuckets = [
+    { label: '< 1 day',    color: C.success, value: 0 },
+    { label: '1 – 3 days', color: C.blue,    value: 0 },
+    { label: '3 – 7 days', color: C.orange,  value: 0 },
+    { label: '> 1 week',   color: C.danger,  value: 0 },
+  ];
   for (const pr of open) {
     const d = ageDays(pr);
-    if      (d < 1) ages['< 1 day']++;
-    else if (d < 3) ages['1 – 3 days']++;
-    else if (d < 7) ages['3 – 7 days']++;
-    else            ages['> 1 week']++;
+    if      (d < 1) ageBuckets[0].value++;
+    else if (d < 3) ageBuckets[1].value++;
+    else if (d < 7) ageBuckets[2].value++;
+    else            ageBuckets[3].value++;
   }
-  const maxAge = Math.max(...Object.values(ages), 1);
-  document.getElementById('age-bars').innerHTML = Object.entries(ages).map(([lbl, n]) => `
-    <div class="bar-row">
-      <span class="bar-label bar-label-age">${lbl}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(n/maxAge*100)}%"></div></div>
-      <span class="bar-count">${n}</span>
-    </div>`).join('');
+  document.getElementById('age-chart').innerHTML =
+    htmlBarChart(ageBuckets, { labelW: '90px' });
 
-  // Repos
+  // ── Repo stacked bar chart ─────────────────────────────────────────
   const byRepo = {};
   for (const pr of open) {
     const repo = pr.repo || pr.repository?.nameWithOwner || 'unknown';
-    if (!byRepo[repo]) byRepo[repo] = { total: 0, reviewed: 0, drafts: 0 };
+    if (!byRepo[repo]) byRepo[repo] = { total: 0, reviewed: 0, pending: 0, drafts: 0 };
     byRepo[repo].total++;
     if (pr.reviewStatus?.hasReviewed) byRepo[repo].reviewed++;
+    else byRepo[repo].pending++;
     if (pr.isDraft) byRepo[repo].drafts++;
   }
   const sortedRepos = Object.entries(byRepo).sort((a, b) => b[1].total - a[1].total);
-  const maxPRs = Math.max(...sortedRepos.map(([, v]) => v.total), 1);
+  const maxRepoTotal = Math.max(...sortedRepos.map(([, v]) => v.total), 1);
 
-  document.getElementById('repo-bars').innerHTML = sortedRepos.map(([repo, v]) => `
-    <div class="bar-row">
-      <span class="bar-label bar-label-repo" title="${repo}">${repo}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(v.total/maxPRs*100)}%"></div></div>
-      <span class="bar-count">${v.total}</span>
-    </div>`).join('');
+  const repoRows = sortedRepos.map(([repo, v]) => {
+    const [org, name] = repo.split('/');
+    const short = name && name.length < 22 ? `${org.slice(0,8)}/${name}` : repo.slice(0, 28);
+    return {
+      label: repo, shortLabel: short,
+      value: v.reviewed,  color: C.success,
+      value2: v.pending,  color2: C.orange,
+    };
+  });
+  document.getElementById('repo-chart').innerHTML = repoRows.length === 0
+    ? '<div class="no-data">No open PRs.</div>'
+    : htmlBarChart(repoRows, { labelW: '140px', showPct: false, maxVal: maxRepoTotal }) +
+      `<div style="display:flex;gap:1.25rem;margin-top:0.65rem;font-size:0.77rem;color:var(--text-muted)">
+         <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.success};margin-right:4px;vertical-align:middle"></span>Reviewed</span>
+         <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.orange};margin-right:4px;vertical-align:middle"></span>Pending</span>
+       </div>`;
 
-  document.querySelector('#repo-table tbody').innerHTML = sortedRepos.map(([repo, v]) => `
-    <tr>
-      <td>${repo}</td>
-      <td>${v.total}</td>
-      <td class="c-success">${v.reviewed}</td>
-      <td class="c-warning">${v.total - v.reviewed}</td>
-      <td class="c-muted">${v.drafts}</td>
-    </tr>`).join('');
-
-  // Authors
+  // ── Author table ───────────────────────────────────────────────────
   const byAuthor = {};
   for (const pr of open) {
     const author = pr.author?.login || 'unknown';
@@ -281,59 +430,85 @@ function render(prs) {
   const sortedAuthors = Object.entries(byAuthor).sort((a, b) => b[1].total - a[1].total);
   document.querySelector('#author-table tbody').innerHTML = sortedAuthors.map(([author, v]) => `
     <tr>
-      <td>${author}</td>
+      <td>${esc(author)}</td>
       <td>${v.total}</td>
       <td class="c-success">${v.reviewed}</td>
       <td class="c-warning">${v.total - v.reviewed}</td>
     </tr>`).join('');
 
-  // Review response times
+  document.querySelector('#repo-table tbody').innerHTML = sortedRepos.map(([repo, v]) => `
+    <tr>
+      <td>${esc(repo)}</td>
+      <td>${v.total}</td>
+      <td class="c-success">${v.reviewed}</td>
+      <td class="c-warning">${v.pending}</td>
+      <td class="c-muted">${v.drafts}</td>
+    </tr>`).join('');
+
+  // ── Response time ──────────────────────────────────────────────────
   const cutoff = Date.now() - 45 * 86400000;
   const responseTimes = [];
-  for (const pr of open) {
+  for (const pr of prs) {
     const rs = pr.reviewStatus;
-    if (rs?.hasReviewed && rs.submittedAt && pr.createdAt && new Date(pr.createdAt) >= cutoff) {
-      const ms = new Date(rs.submittedAt) - new Date(pr.createdAt);
-      if (ms > 0) responseTimes.push({ ms, repo: pr.repo || '', title: pr.title || `#${pr.number}`, number: pr.number });
+    if (rs?.hasReviewed && rs.submittedAt && pr.createdAt) {
+      const opened = new Date(pr.createdAt).getTime();
+      if (opened >= cutoff) {
+        const ms = new Date(rs.submittedAt) - opened;
+        if (ms > 0) responseTimes.push({
+          ms,
+          repo:   pr.repo || pr.repository?.nameWithOwner || '',
+          title:  pr.title || `#${pr.number}`,
+          number: pr.number,
+        });
+      }
     }
   }
 
   if (responseTimes.length === 0) {
-    document.getElementById('response-time-section').classList.add('hidden');
+    document.getElementById('response-section').classList.add('hidden');
   } else {
     const avgMs = responseTimes.reduce((s, r) => s + r.ms, 0) / responseTimes.length;
-    const buckets = { '< 1h': 0, '1 – 8h': 0, '8 – 24h': 0, '1 – 3d': 0, '> 3d': 0 };
-    for (const { ms } of responseTimes) {
-      const h = ms / 3600000;
-      if      (h < 1)  buckets['< 1h']++;
-      else if (h < 8)  buckets['1 – 8h']++;
-      else if (h < 24) buckets['8 – 24h']++;
-      else if (h < 72) buckets['1 – 3d']++;
-      else             buckets['> 3d']++;
-    }
-    const maxBucket = Math.max(...Object.values(buckets), 1);
+    const minMs = Math.min(...responseTimes.map(r => r.ms));
+    const maxMs = Math.max(...responseTimes.map(r => r.ms));
 
-    document.getElementById('response-time-summary').innerHTML = `
-      <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--border);font-size:0.83rem;display:flex;gap:1.5rem">
-        <span>Avg: <strong style="color:var(--yellow)">${fmtDuration(avgMs)}</strong></span>
-        <span>Fastest: <strong class="c-success">${fmtDuration(Math.min(...responseTimes.map(r => r.ms)))}</strong></span>
-        <span>Slowest: <strong class="c-danger">${fmtDuration(Math.max(...responseTimes.map(r => r.ms)))}</strong></span>
-      </div>`;
-
-    document.getElementById('response-time-bars').innerHTML = Object.entries(buckets).map(([lbl, n]) => `
-      <div class="bar-row">
-        <span class="bar-label bar-label-age" style="width:5rem">${lbl}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(n/maxBucket*100)}%"></div></div>
-        <span class="bar-count">${n}</span>
+    document.getElementById('response-summary-row').innerHTML = [
+      { label: 'avg',     val: fmtDuration(avgMs), color: 'var(--yellow)' },
+      { label: 'fastest', val: fmtDuration(minMs), color: C.success },
+      { label: 'slowest', val: fmtDuration(maxMs), color: C.danger  },
+      { label: 'reviews', val: responseTimes.length, color: 'var(--text)' },
+    ].map(x => `
+      <div class="response-summary-item">
+        <strong style="color:${x.color}">${x.val}</strong>
+        <div class="response-summary-label">${x.label}</div>
       </div>`).join('');
 
+    const rtBuckets = [
+      { label: '< 1h',    color: C.success, value: 0 },
+      { label: '1 – 8h',  color: C.blue,    value: 0 },
+      { label: '8 – 24h', color: C.warning, value: 0 },
+      { label: '1 – 3d',  color: C.orange,  value: 0 },
+      { label: '> 3d',    color: C.danger,  value: 0 },
+    ];
+    for (const { ms } of responseTimes) {
+      const h = ms / 3600000;
+      if      (h < 1)  rtBuckets[0].value++;
+      else if (h < 8)  rtBuckets[1].value++;
+      else if (h < 24) rtBuckets[2].value++;
+      else if (h < 72) rtBuckets[3].value++;
+      else             rtBuckets[4].value++;
+    }
+    document.getElementById('response-chart').innerHTML =
+      htmlBarChart(rtBuckets, { labelW: '70px' });
+
     const sorted = [...responseTimes].sort((a, b) => b.ms - a.ms);
-    document.querySelector('#response-time-table tbody').innerHTML = sorted.map(r => `
-      <tr>
-        <td>#${r.number} ${r.title.slice(0, 50)}${r.title.length > 50 ? '…' : ''}</td>
-        <td>${r.repo}</td>
-        <td style="color:${r.ms < 86400000 ? 'var(--success)' : r.ms < 259200000 ? 'var(--warning)' : 'var(--danger)'}">${fmtDuration(r.ms)}</td>
-      </tr>`).join('');
+    document.querySelector('#response-table tbody').innerHTML = sorted.map(r => {
+      const color = r.ms < 86400000 ? C.success : r.ms < 259200000 ? C.warning : C.danger;
+      return `<tr>
+        <td>#${r.number} ${esc(r.title.slice(0, 55))}${r.title.length > 55 ? '…' : ''}</td>
+        <td class="c-muted">${esc(r.repo)}</td>
+        <td style="color:${color};font-weight:600">${fmtDuration(r.ms)}</td>
+      </tr>`;
+    }).join('');
   }
 }
 

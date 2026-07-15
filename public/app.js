@@ -6,6 +6,7 @@ let renderLimit = 25;
 let selectedPRId = null;
 let subscribedRepos = [];
 let lastRefreshWallMs = null;
+let lastPerfData = null;
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -203,6 +204,22 @@ function showToast(message, type = 'info', title = '', duration = 5000) {
   }
 }
 
+function renderPerfBar() {
+  if (!lastPerfData) return;
+  const p = lastPerfData;
+  const fmt = ms => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+  const total = (p.cacheHits ?? 0) + (p.cacheMisses ?? 0);
+  const allCached = p.cacheMisses === 0;
+  const parts = [];
+  if (lastRefreshWallMs != null) parts.push(`refresh: ${fmt(lastRefreshWallMs)}`);
+  if (!allCached && p.ghFetchMs != null) {
+    const avgStr = p.ghSamples > 1 ? ` · avg: ${fmt(p.ghAvgMs)}` : '';
+    parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
+  }
+  if (total > 0) parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
+  document.getElementById('perf-bar').textContent = parts.join('  ·  ');
+}
+
 // Fetch PRs from API
 async function fetchPRs() {
   showLoading(true);
@@ -217,22 +234,8 @@ async function fetchPRs() {
 
       // Update GitHub API timing display
       if (data.perf) {
-        const p = data.perf;
-        const fmt = ms => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
-        const total = (p.cacheHits ?? 0) + (p.cacheMisses ?? 0);
-        const allCached = p.cacheMisses === 0;
-        const parts = [];
-        if (lastRefreshWallMs != null) {
-          parts.push(`refresh: ${fmt(lastRefreshWallMs)}`);
-        }
-        if (!allCached && p.ghFetchMs != null) {
-          const avgStr = p.ghSamples > 1 ? ` · avg: ${fmt(p.ghAvgMs)}` : '';
-          parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
-        }
-        if (total > 0) {
-          parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
-        }
-        document.getElementById('perf-bar').textContent = parts.join('  ·  ');
+        lastPerfData = data.perf;
+        renderPerfBar();
       }
 
       // Track review state changes for debugging
@@ -1022,10 +1025,11 @@ async function refreshGhReport() {
         setTimeout(async () => {
           await fetchPRs();
           lastRefreshWallMs = Math.round(performance.now() - wallStart);
+          renderPerfBar(); // re-render with the now-correct wall time
           progressContainer.classList.add('hidden');
           btn.disabled = false;
           btn.textContent = originalText;
-        }, 500);
+        }, 0);
       }
     };
 

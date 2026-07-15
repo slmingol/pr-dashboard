@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
@@ -58,6 +58,115 @@ function githubGet(apiPath, extraHeaders = {}) {
 }
 const PORT = process.env.PORT || 3000;
 
+// GitHub GraphQL POST (used for the batched PR list fetch)
+function githubGraphQL(query) {
+  return new Promise((resolve, reject) => {
+    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const body = Buffer.from(JSON.stringify({ query }));
+    const req = https.request(
+      {
+        hostname: 'api.github.com',
+        path: '/graphql',
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Content-Length': body.length,
+          'User-Agent': 'pr-dashboard',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+      res => {
+        let raw = '';
+        res.on('data', chunk => { raw += chunk; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(raw);
+            if (json.errors?.length) reject(new Error(json.errors.map(e => e.message).join('; ')));
+            else resolve(json.data);
+          } catch (e) { reject(e); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(20000, () => req.destroy(new Error('GraphQL timeout')));
+    req.write(body);
+    req.end();
+  });
+}
+
+// Fetch all open PRs for a single repo via GraphQL (with pagination)
+async function fetchRepoPRsGraphQL(repo) {
+  const [owner, name] = repo.split('/');
+  const prs = [];
+  let cursor = null;
+
+  for (;;) {
+    const afterClause = cursor ? `, after: ${JSON.stringify(cursor)}` : '';
+    const data = await githubGraphQL(`{
+      repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+        pullRequests(first: 100, states: [OPEN]${afterClause}) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            number url title createdAt updatedAt isDraft reviewDecision
+            author { login }
+          }
+        }
+      }
+    }`);
+
+    const page = data?.repository?.pullRequests;
+    if (!page) break;
+
+    for (const node of page.nodes) {
+      prs.push({
+        id: `${repo}#${node.number}`,
+        repo,
+        number: node.number,
+        title: node.title,
+        url: node.url,
+        state: 'OPEN',
+        isDraft: node.isDraft || false,
+        author: { login: node.author?.login || '' },
+        createdAt: node.createdAt,
+        updatedAt: node.updatedAt,
+        reviewDecision: node.reviewDecision || null,
+        repository: { nameWithOwner: repo },
+        metadata: { age: '', reviewDecision: node.reviewDecision || '', mergeable: '' },
+      });
+    }
+
+    if (!page.pageInfo.hasNextPage) break;
+    cursor = page.pageInfo.endCursor;
+  }
+
+  return prs;
+}
+
+// Fetch all open PRs across all repos concurrently (10 parallel GraphQL queries)
+async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
+  const limit = pLimit(10);
+  let done = 0;
+  const results = await Promise.all(
+    repos.map(repo => limit(async () => {
+      try {
+        const prs = await fetchRepoPRsGraphQL(repo);
+        if (onProgress) onProgress(++done, repos.length);
+        return prs;
+      } catch (err) {
+        console.error(`GraphQL fetch error for ${repo}: ${err.message}`);
+        if (onProgress) onProgress(++done, repos.length);
+        return [];
+      }
+    }))
+  );
+  return results.flat();
+}
+
+// In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
+const prListCache = { prs: null, fetchedAt: 0 };
+const PR_LIST_TTL = 5 * 60 * 1000;
+
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
@@ -69,112 +178,18 @@ const ghFetchTimesMs = [];
 app.use(express.json());
 app.use(express.static('public'));
 
-// Parse a single ghreport output line — handles two formats:
-//   old: https://github.com/owner/repo/pull/N: createdAt 2024-01-01T00:00:00Z
-//   new: https://github.com/owner/repo/pull/N author: login Age: N days reviewDecision: emoji mergeable: emoji
-function parseGhReportLine(line) {
-  const match = line.match(
-    /https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)(?::\s+createdAt\s+(\S+(?:\s+\S+)?))?(?:\s+author:\s+(\S+))?(?:\s+Age:\s+(\d+)\s+(days?|hours?))?/i
-  );
-  if (!match) return null;
 
-  const [, owner, repo, number, createdAt, authorLogin, ageAmount, ageUnit] = match;
 
-  let updatedAt;
-  if (createdAt) {
-    updatedAt = new Date(createdAt).toISOString();
-  } else if (ageAmount) {
-    const ms = ageUnit.toLowerCase().startsWith('day')
-      ? parseInt(ageAmount) * 86400000
-      : parseInt(ageAmount) * 3600000;
-    updatedAt = new Date(Date.now() - ms).toISOString();
-  } else {
-    updatedAt = new Date().toISOString();
-  }
-
-  const repoFullName = `${owner}/${repo}`;
-  return {
-    id: `${repoFullName}#${number}`,
-    repo: repoFullName,
-    number: parseInt(number),
-    title: `PR #${number}`,
-    url: `https://github.com/${repoFullName}/pull/${number}`,
-    state: 'OPEN',
-    author: { login: authorLogin || '' },
-    updatedAt,
-    repository: { nameWithOwner: repoFullName },
-    metadata: { age: '', reviewDecision: '', mergeable: '' }
-  };
-}
-
-// Parse ghreport output
-async function loadPRsFromGhReport() {
-  try {
-    const ghreportPath = process.env.GHREPORT_OUTPUT || '/data/ghreport.txt';
-    const content = await fs.readFile(ghreportPath, 'utf-8');
-
-    // Handle line continuations (lines starting with space are continuations)
-    const rawLines = content.split('\n');
-    const joinedLines = [];
-    let currentLine = '';
-
-    for (const line of rawLines) {
-      if (line.startsWith(' ') && currentLine) {
-        currentLine += line;
-      } else {
-        if (currentLine.trim()) {
-          joinedLines.push(currentLine.trim());
-        }
-        currentLine = line;
-      }
-    }
-    if (currentLine.trim()) {
-      joinedLines.push(currentLine.trim());
-    }
-
-    return joinedLines.map(parseGhReportLine).filter(Boolean);
-  } catch (error) {
-    console.error('Error reading ghreport:', error.message);
-    return [];
-  }
-}
-
-// Fallback: try to run ghreport command directly if file doesn't exist
-async function runGhReportCommand() {
-  try {
-    const env = await getGhreportEnv();
-    const { stdout } = await execAsync('ghreport', { env });
-
-    const rawLines = stdout.split('\n');
-    const joinedLines = [];
-    let currentLine = '';
-
-    for (const line of rawLines) {
-      if (line.startsWith(' ') && currentLine) {
-        currentLine += line;
-      } else {
-        if (currentLine.trim()) {
-          joinedLines.push(currentLine.trim());
-        }
-        currentLine = line;
-      }
-    }
-    if (currentLine.trim()) {
-      joinedLines.push(currentLine.trim());
-    }
-
-    return joinedLines.map(parseGhReportLine).filter(Boolean);
-  } catch (error) {
-    console.error('Error running ghreport command:', error.message);
-    return [];
-  }
-}
-
-// Get current authenticated user
+// Get current authenticated user (cached — identity doesn't change mid-session)
+let _cachedUser = null;
+let _cachedUserAt = 0;
 async function getCurrentUser() {
+  if (_cachedUser && (Date.now() - _cachedUserAt) < 10 * 60 * 1000) return _cachedUser;
   try {
     const { stdout } = await execAsync('gh api user --jq .login');
-    return stdout.trim();
+    _cachedUser = stdout.trim();
+    _cachedUserAt = Date.now();
+    return _cachedUser;
   } catch (error) {
     console.error('Error getting current user:', error.message);
     return null;
@@ -203,15 +218,6 @@ async function getSubscribedRepos() {
   const envRepos = (process.env.subscribedRepos || '').split(/\s+/).filter(Boolean);
   if (envRepos.length > 0) return { repos: envRepos, source: 'env' };
   return { repos: [], source: null };
-}
-
-async function getGhreportEnv() {
-  const { repos, source } = await getSubscribedRepos();
-  if (repos.length > 0) {
-    console.log(`ghreport: using ${repos.length} repos from ${source}`);
-    return { ...process.env, subscribedRepos: repos.join(' ') };
-  }
-  return process.env;
 }
 
 // ─── Persistent cache ────────────────────────────────────────────────────────
@@ -469,11 +475,18 @@ app.get('/api/user', async (req, res) => {
 
 app.get('/api/prs', async (req, res) => {
   try {
-    // Try ghreport file first, then try running ghreport command
-    let prs = await loadPRsFromGhReport();
-    
-    if (prs.length === 0) {
-      prs = await runGhReportCommand();
+    let prs;
+
+    // Prefer in-memory cache (populated by the SSE refresh)
+    if (prListCache.prs && (Date.now() - prListCache.fetchedAt) < PR_LIST_TTL) {
+      prs = prListCache.prs;
+    } else {
+      const { repos } = await getSubscribedRepos();
+      if (repos.length > 0) {
+        prs = await fetchAllOpenPRsFromGitHub(repos, null);
+        prListCache.prs = prs;
+        prListCache.fetchedAt = Date.now();
+      }
     }
     
     // Get current user and check reviews
@@ -663,7 +676,7 @@ app.get('/api/version', (req, res) => {
   res.json({ version });
 });
 
-// SSE endpoint for ghreport refresh with progress tracking
+// SSE endpoint for PR list refresh — now uses concurrent GraphQL instead of ghreport binary
 app.get('/api/refresh-ghreport-stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -674,130 +687,54 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
   };
   const sendProgress = (percent, message) => sendEvent({ progress: percent, message });
 
-  let progressInterval = null;
-  let ghreportProcess = null;
-
-  req.on('close', () => {
-    clearInterval(progressInterval);
-    if (ghreportProcess) ghreportProcess.kill();
-  });
+  let aborted = false;
+  req.on('close', () => { aborted = true; });
 
   try {
-    sendProgress(0, 'Starting ghreport...');
-    sendProgress(10, 'Querying GitHub API...');
-
-    const ghreportEnv = await getGhreportEnv();
-    const ghreport = spawn('ghreport', [], { env: ghreportEnv });
-    ghreportProcess = ghreport;
-
-    let stdout = '';
-    let stderr = '';
-    let progressPercent = 10;
-
-    progressInterval = setInterval(() => {
-      if (progressPercent < 90) {
-        progressPercent += Math.random() * 15;
-        if (progressPercent > 90) progressPercent = 90;
-        sendProgress(Math.floor(progressPercent), 'Fetching PRs from repositories...');
-      }
-    }, 1000);
-
-    ghreport.on('error', (err) => {
-      clearInterval(progressInterval);
-      console.error('ghreport spawn error:', err.message);
-      sendEvent({ error: true, message: `Failed to start ghreport: ${err.message}` });
+    const { repos } = await getSubscribedRepos();
+    if (repos.length === 0) {
+      sendEvent({ error: true, message: 'No repos configured in ghreport config.' });
       res.end();
-    });
+      return;
+    }
 
-    ghreport.stdout.on('data', (data) => {
-      stdout += data.toString();
-      const currentLines = stdout.split('\n').filter(l => l.trim()).length;
-      if (currentLines > 0) {
-        sendProgress(Math.floor(progressPercent), `Found ${currentLines} PRs so far...`);
+    sendProgress(2, `Querying ${repos.length} repos via GitHub GraphQL...`);
+
+    const prs = await fetchAllOpenPRsFromGitHub(repos, (done, total) => {
+      if (!aborted) {
+        const pct = Math.round(2 + (done / total) * 93);
+        sendProgress(pct, `${done}/${total} repos fetched...`);
       }
     });
 
-    ghreport.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    if (aborted) return;
 
-    ghreport.on('close', async (code) => {
-      clearInterval(progressInterval);
+    // Update in-memory cache
+    prListCache.prs = prs;
+    prListCache.fetchedAt = Date.now();
 
-      if (code !== 0) {
-        const errDetail = (stderr || stdout || '(no output)').trim();
-        sendEvent({ error: true, message: `ghreport exited with code ${code}: ${errDetail}` });
-        res.end();
-        return;
-      }
+    // Write ghreport-format file for any external tooling that reads it
+    const outputPath = process.env.GHREPORT_OUTPUT;
+    if (outputPath) {
+      const content = prs.map(pr =>
+        `${pr.url}: createdAt ${new Date(pr.createdAt).toISOString()}`
+      ).join('\n') + '\n';
+      await fs.writeFile(outputPath, content, 'utf-8').catch(e =>
+        console.warn('Could not write ghreport output file:', e.message)
+      );
+    }
 
-      sendProgress(95, 'Processing results...');
-
-      const outputPath = process.env.GHREPORT_OUTPUT;
-      if (outputPath) {
-        try {
-          await fs.writeFile(outputPath, stdout, 'utf-8');
-          console.log(`Updated ghreport output file: ${outputPath}`);
-        } catch (writeError) {
-          console.error(`Failed to write to ${outputPath}:`, writeError.message);
-        }
-      }
-
-      const lineCount = stdout.split('\n').filter(line => line.trim()).length;
-      console.log(`ghreport completed. Found ${lineCount} PRs`);
-
-      sendProgress(100, `Completed! Found ${lineCount} PRs.`);
-      // Send complete but don't call res.end() — client closes the EventSource,
-      // which triggers req 'close' above for cleanup. Calling res.end() here races
-      // with the browser draining the last SSE message, causing spurious onerror.
-      sendEvent({ success: true, prCount: lineCount, complete: true });
-    });
+    console.log(`GitHub GraphQL fetch complete. Found ${prs.length} open PRs across ${repos.length} repos.`);
+    sendProgress(100, `Complete! Found ${prs.length} open PRs.`);
+    sendEvent({ success: true, prCount: prs.length, complete: true });
 
   } catch (error) {
-    console.error('ghreport command failed:', error.message);
+    console.error('GitHub GraphQL fetch failed:', error.message);
     sendEvent({ error: true, message: error.message });
     res.end();
   }
 });
 
-// Legacy POST endpoint for compatibility
-app.post('/api/refresh-ghreport', async (req, res) => {
-  try {
-    console.log('Running ghreport command...');
-    const { stdout, stderr } = await execAsync('ghreport');
-    
-    if (stderr) {
-      console.log('ghreport stderr:', stderr);
-    }
-    
-    // Optionally write to file if GHREPORT_OUTPUT is set
-    const outputPath = process.env.GHREPORT_OUTPUT;
-    if (outputPath) {
-      try {
-        await fs.writeFile(outputPath, stdout, 'utf-8');
-        console.log(`Updated ghreport output file: ${outputPath}`);
-      } catch (writeError) {
-        console.error(`Failed to write to ${outputPath}:`, writeError.message);
-      }
-    }
-    
-    const lineCount = stdout.split('\n').filter(line => line.trim()).length;
-    console.log(`ghreport completed. Found ${lineCount} PRs`);
-    
-    res.json({ 
-      success: true, 
-      message: `Refreshed PR data. Found ${lineCount} PRs.`,
-      prCount: lineCount
-    });
-  } catch (error) {
-    console.error('ghreport command failed:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      message: 'Failed to run ghreport. Make sure it is installed and in PATH.'
-    });
-  }
-});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`PR Dashboard running on http://localhost:${PORT}`);
