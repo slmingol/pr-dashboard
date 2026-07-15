@@ -415,18 +415,14 @@ function render(prs) {
   const sortedRepos = Object.entries(byRepo).sort((a, b) => b[1].total - a[1].total);
   const maxRepoTotal = Math.max(...sortedRepos.map(([, v]) => v.total), 1);
 
-  const repoRows = sortedRepos.map(([repo, v]) => {
-    const [org, name] = repo.split('/');
-    const short = name && name.length < 22 ? `${org.slice(0,8)}/${name}` : repo.slice(0, 28);
-    return {
-      label: repo, shortLabel: short,
-      value: v.reviewed,  color: C.success,
-      value2: v.pending,  color2: C.orange,
-    };
-  });
+  const repoRows = sortedRepos.map(([repo, v]) => ({
+    label: repo,
+    value: v.reviewed,  color: C.success,
+    value2: v.pending,  color2: C.orange,
+  }));
   document.getElementById('repo-chart').innerHTML = repoRows.length === 0
     ? '<div class="no-data">No open PRs.</div>'
-    : htmlBarChart(repoRows, { labelW: '140px', showPct: false, maxVal: maxRepoTotal }) +
+    : htmlBarChart(repoRows, { labelW: '260px', showPct: false, maxVal: maxRepoTotal }) +
       `<div style="display:flex;gap:1.25rem;margin-top:0.65rem;font-size:0.77rem;color:var(--text-muted)">
          <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.success};margin-right:4px;vertical-align:middle"></span>Reviewed</span>
          <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.orange};margin-right:4px;vertical-align:middle"></span>Pending</span>
