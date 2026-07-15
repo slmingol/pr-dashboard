@@ -739,6 +739,7 @@ kbd {
 /* ── Diff modal ───────────────────────────────────────────────────────────── */
 .modal-diff {
   max-width: 1100px;
+  height: 90vh;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -751,7 +752,9 @@ kbd {
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior: contain;
   padding: 1rem 1.25rem 1.25rem;
+  min-height: 0;
 }
 
 .diff-header-bar {
