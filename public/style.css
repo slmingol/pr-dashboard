@@ -766,6 +766,31 @@ kbd {
   flex-shrink: 0;
 }
 
+/* Solid filled variants for diff action buttons */
+.btn-approve {
+  background: rgba(110, 201, 120, 0.85);
+  color: #0d1f0e;
+  border-color: transparent;
+  font-weight: 700;
+}
+.btn-approve:hover { background: rgba(110, 201, 120, 1); color: #0d1f0e; }
+
+.btn-approve-comment {
+  background: transparent;
+  color: var(--success);
+  border: 1.5px solid rgba(110, 201, 120, 0.7);
+  font-weight: 700;
+}
+.btn-approve-comment:hover { background: rgba(110, 201, 120, 0.12); color: var(--success); }
+
+.btn-request-changes {
+  background: rgba(232, 124, 115, 0.85);
+  color: #1f0d0d;
+  border-color: transparent;
+  font-weight: 700;
+}
+.btn-request-changes:hover { background: rgba(232, 124, 115, 1); color: #1f0d0d; }
+
 .diff-scroll-area {
   flex: 1;
   overflow-y: auto;

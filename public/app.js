@@ -752,9 +752,9 @@ async function viewDiff(owner, repo, number) {
 
       const isWatchOnly = watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
       const actionsHtml = isWatchOnly ? '' : `
-        <button class="btn btn-small btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
-        <button class="btn btn-small btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
-        <button class="btn btn-small btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>`;
+        <button class="btn btn-small btn-approve" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
+        <button class="btn btn-small btn-approve-comment" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
+        <button class="btn btn-small btn-request-changes" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>`;
 
       showModal(`
         <div class="diff-header-bar">
