@@ -525,14 +525,13 @@ async function viewDetails(owner, repo, number) {
     
     if (data.success) {
       const pr = data.pr;
-      showModal(`
-        <h2>${pr.title}</h2>
-        <p><strong>State:</strong> ${pr.state}</p>
-        <p><strong>Author:</strong> ${pr.author?.login || 'Unknown'}</p>
-        <p><strong>URL:</strong> <a href="${pr.url}" target="_blank">${pr.url}</a></p>
-        <h3>Description:</h3>
-        <div style="background: var(--bg); padding: 1rem; border-radius: 0.375rem; white-space: pre-wrap;">
-          ${pr.body || 'No description provided'}
+      showModalWithHeader(escapeHtml(pr.title), `
+        <p style="margin:0 0 0.5rem"><strong>Author:</strong> ${escapeHtml(pr.author?.login || 'Unknown')}
+          &nbsp;·&nbsp; <strong>State:</strong> ${pr.state}
+          &nbsp;·&nbsp; <a href="${pr.url}" target="_blank" style="color:var(--primary)">${pr.url}</a></p>
+        <hr style="border:none;border-top:1px solid var(--border);margin:0.75rem 0">
+        <div style="background:var(--bg-deeper);padding:1rem;border-radius:var(--radius-sm);white-space:pre-wrap;font-size:0.875rem;line-height:1.6">
+          ${escapeHtml(pr.body || 'No description provided')}
         </div>
       `);
     } else {
@@ -1035,9 +1034,28 @@ function showModal(content) {
   modal.classList.remove('hidden');
 }
 
+function showModalWithHeader(title, body, { subtitle = '', rightHtml = '' } = {}) {
+  showModal(`
+    <div class="modal-header-bar">
+      <div class="modal-header-left">
+        <span class="modal-header-title">${title}</span>
+        ${subtitle ? `<span class="modal-header-sub">${subtitle}</span>` : ''}
+      </div>
+      <div class="modal-header-right">
+        ${rightHtml}
+        <button class="btn btn-small btn-muted modal-close-btn" onclick="hideModal()" title="Close">&times;</button>
+      </div>
+    </div>
+    <div class="modal-scroll-area">${body}</div>
+  `);
+  document.querySelector('#modal .modal-content').classList.add('modal-panel');
+}
+
 function hideModal() {
   document.getElementById('modal').classList.add('hidden');
-  document.querySelector('#modal .modal-content').classList.remove('modal-diff');
+  const mc = document.querySelector('#modal .modal-content');
+  mc.classList.remove('modal-diff');
+  mc.classList.remove('modal-panel');
 }
 
 // Comment modal functions
@@ -1275,13 +1293,12 @@ function showKeyboardHelp() {
     ['?',      'Show this help'],
     ['Esc',    'Close modal'],
   ];
-  showModal(`
-    <h2>Keyboard Shortcuts</h2>
-    <table style="width:100%;border-collapse:collapse;margin-top:1rem;">
+  showModalWithHeader('Keyboard Shortcuts', `
+    <table style="width:100%;border-collapse:collapse">
       ${bindings.map(([key, desc]) => `
-        <tr>
-          <td style="padding:0.35rem 2rem 0.35rem 0;white-space:nowrap"><kbd>${key}</kbd></td>
-          <td style="padding:0.35rem 0;color:var(--text-muted);font-size:0.875rem">${desc}</td>
+        <tr style="border-top:1px solid var(--border)">
+          <td style="padding:0.4rem 2rem 0.4rem 0;white-space:nowrap"><kbd>${key}</kbd></td>
+          <td style="padding:0.4rem 0;color:var(--text-muted);font-size:0.875rem">${desc}</td>
         </tr>
       `).join('')}
     </table>
@@ -1297,11 +1314,7 @@ function showPerfHelp() {
     ['N/M repos cached',   'PR list ETag cache: N repos returned 304 Not Modified, meaning their open-PR list is unchanged since the last refresh. Those repos cost zero rate-limit quota. M is the total number of watched repos.'],
     ['REST: N/5,000',      'GitHub REST API rate limit remaining in the current hourly window. Resets every hour. The /rate_limit endpoint and ETag 304 responses are exempt and do not count against this total.'],
   ];
-  showModal(`
-    <h2 style="margin-bottom:0.25rem">Performance Bar</h2>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1.25rem">
-      Displayed below the header after each load or refresh. Click any row for details.
-    </p>
+  showModalWithHeader('Performance Bar', `
     <table style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
@@ -1320,7 +1333,7 @@ function showPerfHelp() {
         `).join('')}
       </tbody>
     </table>
-  `);
+  `, { subtitle: 'Displayed below the header after each load or refresh.' });
 }
 
 // ─── Theme toggle ─────────────────────────────────────────────────────────────
@@ -1455,26 +1468,25 @@ function showReposModal() {
   const thStyle = 'padding:0.4rem 0.6rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);cursor:pointer;user-select:none;white-space:nowrap';
   const thStyleC = thStyle + ';text-align:center';
 
-  showModal(`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:1rem">
-      <h2 style="margin:0">Watched Repos <span id="repo-modal-count" style="font-size:0.95rem;font-weight:400;color:var(--text-muted)"></span></h2>
+  showModalWithHeader('Watched Repos', `
+    <table id="repos-table" style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--surface)">
+          <th data-col="org" style="${thStyle}">Org</th>
+          <th data-col="name" style="${thStyle}">Repo</th>
+          <th data-col="prs" style="${thStyleC}">Open PRs</th>
+          <th data-col="watchOnly" style="${thStyleC}">Watch-only</th>
+        </tr>
+      </thead>
+      <tbody id="repos-tbody"></tbody>
+    </table>
+  `, {
+    rightHtml: `
+      <span id="repo-modal-count" class="modal-header-sub"></span>
       <input id="repo-search" type="text" placeholder="Filter repos…" autocomplete="off"
-        style="padding:0.35rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-deeper);color:var(--text);font-size:0.875rem;width:200px;flex-shrink:0">
-    </div>
-    <div style="overflow-y:auto;max-height:62vh">
-      <table id="repos-table" style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--surface)">
-            <th data-col="org" style="${thStyle}">Org</th>
-            <th data-col="name" style="${thStyle}">Repo</th>
-            <th data-col="prs" style="${thStyleC}">Open PRs</th>
-            <th data-col="watchOnly" style="${thStyleC}">Watch-only</th>
-          </tr>
-        </thead>
-        <tbody id="repos-tbody"></tbody>
-      </table>
-    </div>
-  `);
+        style="padding:0.35rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-deeper);color:var(--text);font-size:0.875rem;width:180px">
+    `,
+  });
 
   const tdStyle = 'padding:0.35rem 0.6rem;border-bottom:1px solid var(--border);font-size:0.85rem';
   const tdStyleC = tdStyle + ';text-align:center';

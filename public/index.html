@@ -116,14 +116,22 @@
 
     <!-- Comment Input Modal -->
     <div id="comment-modal" class="modal hidden">
-      <div class="modal-content modal-small">
-        <span class="close-comment">&times;</span>
+      <div class="modal-content modal-small modal-panel">
         <div id="comment-modal-body">
-          <h3 id="comment-modal-title">Add Comment</h3>
-          <textarea id="comment-input" placeholder="Add your comment here..." rows="6"></textarea>
-          <div class="modal-actions">
-            <button id="comment-cancel" class="btn btn-muted">Cancel</button>
-            <button id="comment-submit" class="btn btn-primary">Submit</button>
+          <div class="modal-header-bar">
+            <div class="modal-header-left">
+              <span class="modal-header-title" id="comment-modal-title">Add Comment</span>
+            </div>
+            <div class="modal-header-right">
+              <button class="btn btn-small btn-muted modal-close-btn close-comment" title="Close">&times;</button>
+            </div>
+          </div>
+          <div class="modal-scroll-area" style="display:flex;flex-direction:column;gap:0.75rem">
+            <textarea id="comment-input" placeholder="Add your comment here..." rows="6"></textarea>
+            <div class="modal-actions">
+              <button id="comment-cancel" class="btn btn-muted">Cancel</button>
+              <button id="comment-submit" class="btn btn-primary">Submit</button>
+            </div>
           </div>
         </div>
       </div>
