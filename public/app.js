@@ -776,8 +776,10 @@ async function viewDiff(owner, repo, number) {
             <button class="btn btn-small btn-muted diff-close-btn" onclick="hideModal()" title="Close">&times;</button>
           </div>
         </div>
-        <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
-        <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
+        <div class="diff-scroll-area">
+          <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
+          <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
+        </div>
       `);
       document.querySelector('#modal .modal-content').classList.add('modal-diff');
       const savedView = localStorage.getItem('diffView') || 'unified';
