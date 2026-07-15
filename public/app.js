@@ -695,7 +695,17 @@ function buildSideBySideDiff(diffText) {
 }
 
 function renderSideBySideHtml(rows) {
-  return '<table class="diff-table">' + rows.map(row => {
+  let maxLen = 80;
+  for (const row of rows) {
+    if (row.type === 'context') maxLen = Math.max(maxLen, row.content.length);
+    else if (row.type === 'change') {
+      if (row.left)  maxLen = Math.max(maxLen, row.left.length);
+      if (row.right) maxLen = Math.max(maxLen, row.right.length);
+    }
+  }
+  const colW = Math.max(320, Math.ceil(maxLen * 8));
+  const cs = `style="width:${colW}px"`;
+  return `<table class="diff-table"><colgroup><col ${cs}><col ${cs}></colgroup>` + rows.map(row => {
     if (row.type === 'file') {
       const badge = row.fileType === 'new'
         ? '<span class="diff-file-badge diff-file-badge-added">added</span>'
