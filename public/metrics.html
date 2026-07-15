@@ -527,7 +527,7 @@ function render(prs) {
 
 function renderRateLimit(rateInfo) {
   const el = document.getElementById('ratelimit-chart');
-  if (!rateInfo || (!rateInfo.graphql && !rateInfo.rest)) {
+  if (!rateInfo || (!rateInfo.rest && rateInfo.listMisses == null)) {
     document.getElementById('ratelimit-section').classList.add('hidden');
     return;
   }
@@ -540,55 +540,73 @@ function renderRateLimit(rateInfo) {
     return p < 0.5 ? success : p < 0.8 ? warning : danger;
   };
 
-  const rows = [];
-  if (rateInfo.graphql) {
-    const rl = rateInfo.graphql;
-    const used = (rl.limit ?? 5000) - (rl.remaining ?? 0);
-    const resetStr = rl.resetAt ? new Date(rl.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    rows.push({ label: 'GraphQL', used, remaining: rl.remaining ?? 0, limit: rl.limit ?? 5000, cost: rl.cost, resetStr });
-  }
+  // REST rate limit bar
+  let barsHtml = '';
   if (rateInfo.rest) {
     const rl = rateInfo.rest;
     const used = (rl.limit ?? 5000) - (rl.remaining ?? 0);
+    const remaining = rl.remaining ?? 0;
+    const limit = rl.limit ?? 5000;
+    const usedPct = limit > 0 ? Math.max(0, Math.min(100, used / limit * 100)) : 0;
+    const remPct  = limit > 0 ? Math.max(0, Math.min(100, remaining / limit * 100)) : 0;
+    const uc = usageColor(used, limit);
     const resetStr = rl.reset ? new Date(rl.reset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    rows.push({ label: 'REST', used, remaining: rl.remaining ?? 0, limit: rl.limit ?? 5000, cost: null, resetStr });
-  }
-
-  const barsHtml = rows.map(r => {
-    const usedPct  = r.limit > 0 ? Math.max(0, Math.min(100, r.used / r.limit * 100)) : 0;
-    const remPct   = r.limit > 0 ? Math.max(0, Math.min(100, r.remaining / r.limit * 100)) : 0;
-    const uc = usageColor(r.used, r.limit);
-    const costStr  = r.cost != null ? ` · ${r.cost} pts this refresh` : '';
-    const resetStr = r.resetStr ? ` · resets ${r.resetStr}` : '';
-    return `<div class="rl-row">
-      <span class="rl-label">${r.label}</span>
+    barsHtml = `<div class="rl-row">
+      <span class="rl-label">REST</span>
       <div class="rl-track">
         <div class="rl-seg" style="width:${usedPct.toFixed(1)}%;background:${uc}"></div>
         <div class="rl-seg" style="width:${remPct.toFixed(1)}%;background:var(--surface-hover)"></div>
       </div>
-      <span class="rl-info">${r.remaining.toLocaleString()} / ${r.limit.toLocaleString()} remaining${costStr}${resetStr}</span>
+      <span class="rl-info">${remaining.toLocaleString()} / ${limit.toLocaleString()} remaining${resetStr ? ` · resets ${resetStr}` : ''}</span>
     </div>`;
-  }).join('');
+  }
 
-  const tiles = rows.map(r => {
-    const pct = r.limit > 0 ? Math.round(r.remaining / r.limit * 100) : 0;
-    const c = usageColor(r.used, r.limit);
-    return `<div class="response-summary-item">
-      <strong style="color:${c}">${r.remaining.toLocaleString()}</strong>
-      <div class="response-summary-label">${r.label} remaining (${pct}%)</div>
+  // PR list ETag cache bar (hits = 304 free / misses = 200 consumed quota)
+  let etagHtml = '';
+  if (rateInfo.listMisses != null) {
+    const hits   = rateInfo.listHits ?? 0;
+    const misses = rateInfo.listMisses ?? 0;
+    const total  = hits + misses;
+    const hitPct   = total > 0 ? (hits   / total * 100) : 0;
+    const missPct  = total > 0 ? (misses / total * 100) : 0;
+    etagHtml = `<div class="rl-row">
+      <span class="rl-label">PR list</span>
+      <div class="rl-track">
+        <div class="rl-seg" style="width:${missPct.toFixed(1)}%;background:${usageColor(misses, total)}"></div>
+        <div class="rl-seg" style="width:${hitPct.toFixed(1)}%;background:${success};opacity:0.35"></div>
+      </div>
+      <span class="rl-info">${hits}/${total} repos unchanged (304) · ${misses} fetched (200)</span>
     </div>`;
-  });
-  const graphqlRow = rateInfo.graphql;
-  if (graphqlRow?.cost != null) {
+  }
+
+  // Stat tiles
+  const tiles = [];
+  if (rateInfo.rest) {
+    const rl = rateInfo.rest;
+    const used = (rl.limit ?? 5000) - (rl.remaining ?? 0);
+    const pct = rl.limit > 0 ? Math.round((rl.remaining ?? 0) / rl.limit * 100) : 0;
     tiles.push(`<div class="response-summary-item">
-      <strong style="color:var(--primary)">${graphqlRow.cost}</strong>
-      <div class="response-summary-label">pts last refresh</div>
+      <strong style="color:${usageColor(used, rl.limit ?? 5000)}">${(rl.remaining ?? 0).toLocaleString()}</strong>
+      <div class="response-summary-label">REST remaining (${pct}%)</div>
+    </div>`);
+  }
+  if (rateInfo.listMisses != null) {
+    const hits = rateInfo.listHits ?? 0;
+    const total = hits + (rateInfo.listMisses ?? 0);
+    const savePct = total > 0 ? Math.round(hits / total * 100) : 0;
+    tiles.push(`<div class="response-summary-item">
+      <strong style="color:${success}">${savePct}%</strong>
+      <div class="response-summary-label">repos skipped via ETag</div>
+    </div>`);
+    tiles.push(`<div class="response-summary-item">
+      <strong style="color:var(--text)">${rateInfo.listMisses}</strong>
+      <div class="response-summary-label">repos fetched (changed)</div>
     </div>`);
   }
 
-  el.innerHTML = barsHtml +
+  el.innerHTML = barsHtml + etagHtml +
     `<div class="response-summary-row" style="margin-top:0.85rem;border-bottom:none;padding-bottom:0">${tiles.join('')}</div>` +
-    `<div class="rl-note">Bar shows consumed (colored) vs available (gray) out of the 5,000-point hourly window. The /rate_limit endpoint and rateLimit GraphQL field are exempt from rate limiting.</div>`;
+    `<div class="rl-note">REST bar: consumed (colored) vs available out of the 5,000-request/hour window. PR list bar: repos that returned 304 Not Modified cost zero quota.</div>`;
 }
 
 (async () => {

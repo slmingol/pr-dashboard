@@ -58,130 +58,95 @@ function githubGet(apiPath, extraHeaders = {}) {
 }
 const PORT = process.env.PORT || 3000;
 
-// GitHub GraphQL POST (used for the batched PR list fetch)
-function githubGraphQL(query) {
-  return new Promise((resolve, reject) => {
-    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-    const body = Buffer.from(JSON.stringify({ query }));
-    const req = https.request(
-      {
-        hostname: 'api.github.com',
-        path: '/graphql',
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Content-Length': body.length,
-          'User-Agent': 'pr-dashboard',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      },
-      res => {
-        let raw = '';
-        res.on('data', chunk => { raw += chunk; });
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(raw);
-            if (json.errors?.length) reject(new Error(json.errors.map(e => e.message).join('; ')));
-            else resolve(json.data);
-          } catch (e) { reject(e); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.setTimeout(20000, () => req.destroy(new Error('GraphQL timeout')));
-    req.write(body);
-    req.end();
-  });
+// Map a REST API PR object to our internal shape
+function mapRestPR(repo, pr) {
+  return {
+    id: `${repo}#${pr.number}`,
+    repo,
+    number: pr.number,
+    title: pr.title,
+    url: pr.html_url,
+    state: 'OPEN',
+    isDraft: pr.draft || false,
+    author: { login: pr.user?.login || '' },
+    createdAt: pr.created_at,
+    updatedAt: pr.updated_at,
+    reviewDecision: null,
+    repository: { nameWithOwner: repo },
+    metadata: { age: '', reviewDecision: '', mergeable: '' },
+  };
 }
 
-// Fetch all open PRs for a single repo via GraphQL (with pagination)
-async function fetchRepoPRsGraphQL(repo) {
+// Per-repo ETag cache for the open-PR list (REST GET supports conditional requests; GraphQL does not)
+const prListEtagCache = new Map(); // repo → { etag, prs, pageCount }
+
+// Fetch open PRs for one repo via REST with ETag support.
+// 304 Not Modified = free (exempt from rate limiting); only repos with changes cost quota.
+async function fetchRepoPRsRest(repo) {
   const [owner, name] = repo.split('/');
-  const prs = [];
-  let cursor = null;
-  let lastRateLimit = null;
+  const cached = prListEtagCache.get(repo);
 
-  for (;;) {
-    const afterClause = cursor ? `, after: ${JSON.stringify(cursor)}` : '';
-    const data = await githubGraphQL(`{
-      rateLimit { cost remaining limit resetAt used }
-      repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
-        pullRequests(first: 100, states: [OPEN]${afterClause}) {
-          pageInfo { hasNextPage endCursor }
-          nodes {
-            number url title createdAt updatedAt isDraft reviewDecision
-            author { login }
-          }
-        }
-      }
-    }`);
+  // Send If-None-Match only for single-page repos; multi-page repos have per-page ETags
+  // which don't cover the full list, so we skip the optimisation and always re-fetch.
+  const etag = (cached?.pageCount === 1 && cached.etag) ? cached.etag : null;
+  const result = await githubGet(
+    `/repos/${owner}/${name}/pulls?state=open&per_page=100`,
+    etag ? { 'If-None-Match': etag } : {}
+  );
 
-    if (data?.rateLimit) lastRateLimit = data.rateLimit;
-
-    const page = data?.repository?.pullRequests;
-    if (!page) break;
-
-    for (const node of page.nodes) {
-      prs.push({
-        id: `${repo}#${node.number}`,
-        repo,
-        number: node.number,
-        title: node.title,
-        url: node.url,
-        state: 'OPEN',
-        isDraft: node.isDraft || false,
-        author: { login: node.author?.login || '' },
-        createdAt: node.createdAt,
-        updatedAt: node.updatedAt,
-        reviewDecision: node.reviewDecision || null,
-        repository: { nameWithOwner: repo },
-        metadata: { age: '', reviewDecision: node.reviewDecision || '', mergeable: '' },
-      });
-    }
-
-    if (!page.pageInfo.hasNextPage) break;
-    cursor = page.pageInfo.endCursor;
+  if (result.status === 304 && cached) {
+    return { prs: cached.prs, fromCache: true };
   }
 
-  return { prs, rateLimit: lastRateLimit };
+  if (result.status !== 200) return { prs: [], fromCache: false };
+
+  const page1 = JSON.parse(result.body);
+  let prs = page1.map(pr => mapRestPR(repo, pr));
+  let pageCount = 1;
+
+  if (page1.length === 100) {
+    let pageNum = 2;
+    for (;;) {
+      const next = await githubGet(
+        `/repos/${owner}/${name}/pulls?state=open&per_page=100&page=${pageNum}`
+      );
+      if (next.status !== 200) break;
+      const data = JSON.parse(next.body);
+      if (!data.length) break;
+      prs = prs.concat(data.map(pr => mapRestPR(repo, pr)));
+      pageCount++;
+      if (data.length < 100) break;
+      pageNum++;
+    }
+  }
+
+  prListEtagCache.set(repo, { etag: result.etag || null, prs, pageCount });
+  return { prs, fromCache: false };
 }
 
-// Fetch all open PRs across all repos concurrently (10 parallel GraphQL queries)
+// Fetch all open PRs across all repos concurrently (10 parallel REST requests)
 async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
   const limit = pLimit(10);
   let done = 0;
-  let totalCost = 0;
-  let minRemaining = Infinity;
-  let rlMeta = null;
+  let listHits = 0, listMisses = 0;
 
   const results = await Promise.all(
     repos.map(repo => limit(async () => {
       try {
-        const { prs, rateLimit } = await fetchRepoPRsGraphQL(repo);
-        if (rateLimit) {
-          totalCost += rateLimit.cost || 0;
-          if (rateLimit.remaining < minRemaining) minRemaining = rateLimit.remaining;
-          rlMeta = { limit: rateLimit.limit, resetAt: rateLimit.resetAt };
-        }
+        const { prs, fromCache } = await fetchRepoPRsRest(repo);
+        if (fromCache) listHits++; else listMisses++;
         if (onProgress) onProgress(++done, repos.length);
         return prs;
       } catch (err) {
-        console.error(`GraphQL fetch error for ${repo}: ${err.message}`);
+        console.error(`REST fetch error for ${repo}: ${err.message}`);
+        listMisses++;
         if (onProgress) onProgress(++done, repos.length);
         return [];
       }
     }))
   );
 
-  const rateLimit = rlMeta ? {
-    cost: totalCost,
-    remaining: minRemaining === Infinity ? null : minRemaining,
-    limit: rlMeta.limit,
-    resetAt: rlMeta.resetAt,
-  } : null;
-
-  return { prs: results.flat(), rateLimit };
+  return { prs: results.flat(), listHits, listMisses };
 }
 
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
@@ -193,7 +158,7 @@ const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, tim
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
 const CACHE_FILE = process.env.REVIEW_CACHE_FILE || '/data/review-cache.json';
 
-// Ring buffer of the last 10 GitHub API (GraphQL batch) fetch durations (ms)
+// Ring buffer of the last 10 GitHub API (review-status REST batch) fetch durations (ms)
 const ghFetchTimesMs = [];
 
 app.use(express.json());
@@ -508,7 +473,10 @@ app.get('/api/prs', async (req, res) => {
         prs = result.prs;
         prListCache.prs = prs;
         prListCache.fetchedAt = Date.now();
-        if (result.rateLimit) prListCache.rateInfo = { graphql: result.rateLimit, rest: null, fetchedAt: Date.now() };
+        if (prListCache.rateInfo) {
+          prListCache.rateInfo.listHits = result.listHits;
+          prListCache.rateInfo.listMisses = result.listMisses;
+        }
       }
     }
     
@@ -735,7 +703,7 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     sendProgress(2, `Querying ${repos.length} repos via GitHub GraphQL...`);
 
-    const { prs, rateLimit: graphqlRL } = await fetchAllOpenPRsFromGitHub(repos, (done, total) => {
+    const { prs, listHits, listMisses } = await fetchAllOpenPRsFromGitHub(repos, (done, total) => {
       if (!aborted) {
         const pct = Math.round(2 + (done / total) * 93);
         sendProgress(pct, `${done}/${total} repos fetched...`);
@@ -754,7 +722,7 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
     // Update in-memory cache
     prListCache.prs = prs;
     prListCache.fetchedAt = Date.now();
-    prListCache.rateInfo = { graphql: graphqlRL, rest: restRL, fetchedAt: Date.now() };
+    prListCache.rateInfo = { listHits, listMisses, rest: restRL, fetchedAt: Date.now() };
 
     // Write ghreport-format file for any external tooling that reads it
     const outputPath = process.env.GHREPORT_OUTPUT;
@@ -767,8 +735,8 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
       );
     }
 
-    console.log(`GitHub GraphQL fetch complete. Found ${prs.length} open PRs across ${repos.length} repos.`);
-    sendProgress(100, `Complete! Found ${prs.length} open PRs.`);
+    console.log(`PR list fetch complete. Found ${prs.length} open PRs across ${repos.length} repos (${listHits} cached / ${listMisses} fetched).`);
+    sendProgress(100, `Complete! Found ${prs.length} open PRs (${listHits}/${repos.length} repos unchanged).`);
     sendEvent({ success: true, prCount: prs.length, complete: true });
 
   } catch (error) {

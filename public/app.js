@@ -217,9 +217,10 @@ function renderPerfBar() {
     parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
   }
   if (total > 0) parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
-  if (p.rateInfo?.graphql) {
-    const rl = p.rateInfo.graphql;
-    parts.push(`GraphQL: ${rl.remaining?.toLocaleString()}/${rl.limit?.toLocaleString()} (${rl.cost}pts)`);
+  if (p.rateInfo && p.rateInfo.listMisses != null) {
+    const total = (p.rateInfo.listHits ?? 0) + (p.rateInfo.listMisses ?? 0);
+    const hits = p.rateInfo.listHits ?? 0;
+    parts.push(hits === total ? `${total} repos cached` : `${hits}/${total} repos cached`);
   }
   if (p.rateInfo?.rest) {
     const rl = p.rateInfo.rest;
