@@ -2,7 +2,7 @@
   <img src="docs/banner.svg" alt="PR Dashboard" width="900"/>
 </p>
 
-A containerized pull request dashboard that integrates with [`ghreport`](https://github.com/slmingol/ghreport) and the GitHub CLI to provide a consolidated view of all monitored PRs with review tracking and management features.
+A containerized pull request dashboard that queries GitHub directly via GraphQL to provide a consolidated view of all monitored PRs with review tracking, metrics, and management features.
 
 ## Screenshots
 
@@ -54,10 +54,10 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 ### Core
 
-- **Consolidated PR view** -- all PRs from `ghreport` output, grouped by repository with sticky headers
+- **Consolidated PR view** -- all open PRs across monitored repos, grouped by repository with sticky headers
 - **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
 - **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage
-- **Watch-only repos** -- mark repos as view-only to suppress review actions (useful for monitoring repos you don't participate in)
+- **Watch-only repos** -- mark repos as view-only to suppress review actions
 - **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, or draft status
 - **Statistics bar** -- real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
 
@@ -77,15 +77,28 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 ### Data refresh
 
-- **Refresh Data** -- re-runs `ghreport` inside the container to fetch the latest PRs from all monitored repositories (20-30 seconds for 100+ repos); streams progress via SSE
-- **Reload** -- reloads the PR list from the current `ghreport` output file (instant)
+- **Refresh Data** -- queries all monitored repositories via concurrent GitHub GraphQL (10 parallel requests); ~7s for 100+ repos; streams real per-repo progress via SSE
+- **Reload** -- returns the cached PR list instantly (in-memory cache, 5-minute TTL) without hitting GitHub
+- **Performance bar** -- shows wall-clock refresh time, review-status fetch time, cache hit ratio, and GraphQL/REST rate limit consumption after every load
+
+### Metrics page (`/metrics`)
+
+A separate analytics view covering:
+
+- **Review coverage** -- open PRs reviewed vs. pending, as a stacked percentage bar
+- **Your review activity** -- donut chart of opened / closed / approved this cycle
+- **PR age distribution** -- bar chart bucketed by age
+- **Open PRs by repo** -- stacked bars showing reviewed vs. pending per repository
+- **Review response time** -- histogram and table of time from PR open to your first review (last 45 days)
+- **Author breakdown** -- open PRs by author with reviewed/pending split
+- **GitHub API rate limits** -- bars showing GraphQL and REST consumption vs. the 5,000-point hourly window, with points consumed per refresh and reset times
 
 ### UI/UX
 
 - Dark/light mode with saved preference
 - Compact single-line PR cards for maximum density
 - Toast notifications for actions
-- Keyboard shortcuts for full mouse-free operation (see below)
+- Keyboard shortcuts for full mouse-free operation
 - Filter preferences (search, state, show-hidden, show-drafts) persist across page loads
 
 ## Keyboard Shortcuts
@@ -103,7 +116,7 @@ Press `?` or click the `⌨` button in the header to open the in-app shortcuts r
 | `h` | Hide / unhide PR |
 | `o` | Open PR in GitHub |
 | `r` | Reload PR list |
-| `R` | Refresh ghreport data |
+| `R` | Refresh data from GitHub |
 | `/` | Focus search box |
 | `?` | Show keyboard shortcuts |
 | `Esc` | Close modal |
@@ -113,10 +126,8 @@ Action keys (`a`, `x`, `c`) are silently blocked for watch-only repos.
 ## Prerequisites
 
 - **Podman Desktop** or **Docker**
-- **GitHub CLI** (`gh`) installed and authenticated on the host
-- A GitHub personal access token
-
-`ghreport` is automatically installed inside the container during build -- no host installation required.
+- **GitHub CLI** (`gh`) installed and authenticated on the host (used for review/comment/diff/checkout operations)
+- A GitHub personal access token with `repo` scope
 
 ## Setup
 
@@ -126,16 +137,25 @@ Action keys (`a`, `x`, `c`) are silently blocked for watch-only repos.
 echo "GH_TOKEN=$(gh auth token)" > .env
 ```
 
-### 2. Configure ghreport
+### 2. Configure watched repos
 
-The container reads `~/.config/ghreport/config.yaml` for the `subscribedRepos` list. Mount it into the container (already configured in `docker-compose.yml`):
+The dashboard reads `~/.config/ghreport/config.yaml` for the `subscribedRepos` list. Mount it into the container (already configured in `docker-compose.yml`):
 
 ```yaml
 volumes:
   - ~/.config/ghreport:/root/.config/ghreport:ro
 ```
 
-You can also set `subscribedRepos` directly in `.env`:
+The relevant section of the config file:
+
+```yaml
+subscribedRepos:
+  - org/repo1
+  - org/repo2
+  - org/repo3
+```
+
+You can also pass the list directly via `.env`:
 
 ```bash
 echo 'subscribedRepos=org/repo1 org/repo2 org/repo3' >> .env
@@ -158,6 +178,8 @@ podman compose up -d --build
 
 [http://localhost:3000](http://localhost:3000)
 
+Metrics: [http://localhost:3000/metrics](http://localhost:3000/metrics)
+
 ## Makefile targets
 
 ```
@@ -177,20 +199,20 @@ make clean     # remove container and image
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GH_TOKEN` | Yes | -- | GitHub personal access token |
-| `GITHUB_TOKEN` | Auto | same as GH_TOKEN | For ghreport authentication |
-| `subscribedRepos` | No | from config.yaml | Space-separated repos to monitor |
+| `GH_TOKEN` | Yes | -- | GitHub personal access token (`repo` scope) |
+| `subscribedRepos` | No | from config.yaml | Space-separated list of `org/repo` to monitor |
+| `GHREPORT_CONFIG` | No | `~/.config/ghreport/config.yaml` | Path to the config file inside the container |
+| `GHREPORT_OUTPUT` | No | -- | If set, writes a ghreport-format text file after each refresh (for external tooling) |
 | `NODE_ENV` | No | `production` | Node environment |
 | `PORT` | No | `3000` | Server port |
-| `GHREPORT_OUTPUT` | No | `/data/ghreport.txt` | Path to ghreport output inside container |
 
 ### Volume mounts (docker-compose.yml)
 
 ```yaml
 volumes:
-  - ~/.config/gh:/root/.config/gh:ro              # gh CLI auth
-  - ~/.config/ghreport:/root/.config/ghreport:ro  # ghreport config
-  - ~/ghreport-output:/data                       # ghreport output directory
+  - ~/.config/gh:/root/.config/gh:ro              # gh CLI auth (for review/diff/checkout)
+  - ~/.config/ghreport:/root/.config/ghreport:ro  # repo list config
+  - ~/ghreport-output:/data                       # optional: output file directory
   - ~/.gitconfig:/root/.gitconfig:ro              # git config for checkout
 ```
 
@@ -199,39 +221,76 @@ volumes:
 | Key | Description |
 |-----|-------------|
 | `theme` | `dark` or `light` |
-| `hiddenPRs` | Array of `"owner/repo#number"` strings |
+| `hiddenPRs` | Object keyed by `"owner/repo#number"` |
 | `watchOnlyRepos` | Object keyed by `"owner/repo"` |
 | `diffView` | `unified` or `split` |
 | `filterSearch` | Last search term |
 | `filterState` | Last state filter value |
 | `filterShowHidden` | Last show-hidden checkbox state |
-| `filterShowDrafts` | Last show-drafts checkbox state |
+| `filterShowDrafts` | Last show-drafts checkbox state (default: off) |
 
 ## Architecture
 
 ### Stack
 
 - **Base image**: `node:18-alpine`
-- **Additional tools**: `github-cli`, `git`, `go` (for ghreport build)
-- **ghreport**: Installed via `go install github.com/slmingol/ghreport@latest`
+- **Additional tools**: `github-cli`, `git`
 - **Backend**: Node.js 18 + Express 4.18
 - **Frontend**: Vanilla JavaScript, no build step
 - **Port**: 3000
+
+### How data flows
+
+**Refresh Data (SSE stream)**
+
+```
+browser SSE connect → /api/refresh-ghreport-stream
+  → read subscribedRepos from config.yaml (or env)
+  → fetchAllOpenPRsFromGitHub: pLimit(10) concurrent GraphQL queries
+      each query: { rateLimit { cost remaining } repository { pullRequests { ... } } }
+  → fetch /rate_limit REST endpoint for REST quota snapshot
+  → store results in prListCache (in-memory, 5-min TTL)
+  → report real per-repo progress events back to browser (~7s for 126 repos)
+```
+
+**Page load / Reload**
+
+```
+browser GET /api/prs
+  → if prListCache is fresh: return cached PR list instantly
+  → else: fetchAllOpenPRsFromGitHub directly, populate cache
+  → fetch review status for each PR via REST+ETag (parallel, concurrency-limited)
+      cache hits (304 Not Modified) skip network round-trip
+  → return PRs + review statuses + perf metadata (timing, cache ratio, rate limits)
+```
+
+**Review operations** (approve / request-changes / comment / diff / checkout) continue to use `gh` CLI subprocesses, which handle auth, branch operations, and other stateful interactions that benefit from the CLI's built-in safety checks.
+
+### Caching layers
+
+| Layer | TTL | Purpose |
+|-------|-----|---------|
+| `prListCache` | 5 min | In-memory PR list; avoids re-fetching GitHub on every Reload |
+| `reviewCache` | 5 min | Per-PR review status; invalidated immediately on your own review actions |
+| REST ETags | server-driven | GitHub returns 304 for unchanged PR review state; saves quota |
+| `_cachedUser` | 10 min | Authenticated username from `gh api user` |
 
 ### API endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/prs` | All PRs with review status |
+| GET | `/api/prs` | All PRs with review status and perf metadata |
 | GET | `/api/user` | Current authenticated GitHub user |
-| GET | `/api/repos` | Subscribed repo list from ghreport config |
+| GET | `/api/repos` | Subscribed repo list |
+| GET | `/api/rate-limit` | Current GitHub API rate limit status (GraphQL + REST) |
 | GET | `/api/pr/:owner/:repo/:number` | PR details |
 | GET | `/api/pr/:owner/:repo/:number/diff` | PR diff |
 | POST | `/api/pr/:owner/:repo/:number/checkout` | Checkout branch locally |
 | POST | `/api/pr/:owner/:repo/:number/comment` | Add comment |
-| POST | `/api/pr/:owner/:repo/:number/review` | Submit review |
-| GET | `/api/refresh-ghreport-stream` | Re-run ghreport with SSE progress |
+| POST | `/api/pr/:owner/:repo/:number/review` | Submit review (approve / request-changes / comment) |
+| GET | `/api/refresh-ghreport-stream` | Fetch all open PRs via GraphQL with SSE progress |
 | GET | `/api/health` | Health check |
+| GET | `/metrics` | Metrics page |
 
 ### File structure
 
@@ -240,8 +299,9 @@ pr-dashboard/
 ├── docs/
 │   └── screenshots/        # README screenshots
 ├── public/
-│   ├── index.html          # Main HTML
+│   ├── index.html          # Main dashboard HTML
 │   ├── app.js              # Frontend logic
+│   ├── metrics.html        # Metrics page (self-contained)
 │   └── style.css           # Theming and layout
 ├── server.js               # Express backend
 ├── docker-compose.yml      # Container orchestration
@@ -254,36 +314,36 @@ pr-dashboard/
 
 ## Development
 
+### Container dev mode
+
+`make up` uses `docker-compose.override.yml` to mount `public/` and `server.js` as live volumes. Source changes are reflected immediately via `node --watch` without rebuilding the image.
+
 ### Local (without container)
 
 ```bash
 npm install
 export GH_TOKEN=$(gh auth token)
-export GHREPORT_OUTPUT=/path/to/ghreport.txt
 node server.js
 ```
 
-### Container dev mode
-
-`make up` uses `docker-compose.override.yml` to mount `public/` and `server.js` as live volumes -- source changes are reflected immediately without rebuilding.
+The repo list will be read from `~/.config/ghreport/config.yaml` if it exists, or from the `subscribedRepos` env var.
 
 ## Troubleshooting
 
 **PRs not loading**
-- Verify `ghreport.txt` exists at the mounted path
 - Check container logs: `podman logs pr-dashboard`
-- Confirm `GH_TOKEN` is set and valid
+- Confirm `GH_TOKEN` is set and has `repo` scope
+- Verify the config file is mounted and contains repos under `subscribedRepos`
+- Click **Refresh Data** to trigger a fresh GraphQL fetch
 
 **Review status not showing**
 - Open browser console (F12) and look for: `Current authenticated user: yourusername`
-- Check for per-PR review log lines
-- 404/403 errors for private/deleted repos are silently ignored
+- 404/403 errors for private or deleted repos are silently ignored
 
 **Missing repos in the dashboard**
 - Ensure `~/.config/ghreport/config.yaml` is mounted and contains the repo under `subscribedRepos`
 - Restart container after config changes: `make restart`
-- Container logs will confirm: `ghreport: using N repos from /root/.config/ghreport/config.yaml`
-- Click the **Repos** stat tile to verify which repos the dashboard knows about
+- Click the **Repos** stat tile to see which repos the dashboard is watching
 
 **Container won't start**
 - `podman ps -a` and `podman logs pr-dashboard --tail 50`
