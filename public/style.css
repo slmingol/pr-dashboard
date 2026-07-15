@@ -911,23 +911,24 @@ kbd {
 }
 .diff-ln {
   min-width: 3rem; text-align: right; padding: 0 0.5rem;
-  color: var(--text-muted); opacity: 0.45; font-size: 0.75rem;
-  user-select: none; flex-shrink: 0; border-right: 1px solid transparent;
+  color: var(--text-muted); font-size: 0.75rem;
+  user-select: none; flex-shrink: 0; border-right: 1px solid var(--border);
+  background: rgba(0,0,0,0.12);
 }
-.diff-ln-empty { min-width: 3rem; flex-shrink: 0; }
-.diff-sign { padding: 0 0.4rem 0 0.3rem; flex-shrink: 0; color: var(--text-muted); opacity: 0.6; }
+.diff-ln-empty { min-width: 3rem; flex-shrink: 0; background: rgba(0,0,0,0.12); border-right: 1px solid var(--border); }
+.diff-sign { padding: 0 0.4rem 0 0.5rem; flex-shrink: 0; color: var(--text-muted); }
 .diff-code { flex: 1; min-width: 0; padding-right: 0.5rem; }
 
-.diff-add           { background: rgba(110, 201, 120, 0.1); }
-.diff-add .diff-ln  { background: rgba(110, 201, 120, 0.1); border-right-color: rgba(110, 201, 120, 0.25); opacity: 0.7; }
-.diff-add .diff-sign { color: var(--success); opacity: 1; }
+.diff-add           { background: rgba(110, 201, 120, 0.08); }
+.diff-add .diff-ln  { background: rgba(110, 201, 120, 0.15); border-right-color: rgba(110, 201, 120, 0.3); }
+.diff-add .diff-sign { color: var(--success); font-weight: 700; }
 
-.diff-remove           { background: rgba(232, 124, 115, 0.1); }
-.diff-remove .diff-ln  { background: rgba(232, 124, 115, 0.1); border-right-color: rgba(232, 124, 115, 0.25); opacity: 0.7; }
-.diff-remove .diff-sign { color: var(--danger); opacity: 1; }
+.diff-remove           { background: rgba(232, 124, 115, 0.08); }
+.diff-remove .diff-ln  { background: rgba(232, 124, 115, 0.15); border-right-color: rgba(232, 124, 115, 0.3); }
+.diff-remove .diff-sign { color: var(--danger); font-weight: 700; }
 
 .diff-hunk-bar {
-  padding: 0.15rem 0.5rem 0.15rem calc(6rem + 0.7rem);
+  padding: 0.15rem 0.5rem 0.15rem calc(6rem + 1.2rem);
   background: rgba(124, 179, 224, 0.05);
   border-top: 1px solid rgba(124, 179, 224, 0.1);
   border-bottom: 1px solid rgba(124, 179, 224, 0.1);
