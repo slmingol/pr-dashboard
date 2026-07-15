@@ -329,6 +329,16 @@ pr-dashboard/
 
 ## Development
 
+### Updating README screenshots
+
+With the dev server running (`make up` or `node server.js`), regenerate all screenshots in one command:
+
+```bash
+node scripts/screenshot.js
+```
+
+This uses headless Chromium via puppeteer to capture the main dashboard, stats bar, filter bar, keyboard shortcuts modal, repos modal, and repos modal with search active -- then writes them directly to `docs/screenshots/`. Commit the resulting PNGs.
+
 ### Container dev mode
 
 `make up` uses `docker-compose.override.yml` to mount `public/` and `server.js` as live volumes. Source changes are reflected immediately via `node --watch` without rebuilding the image.
