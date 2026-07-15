@@ -766,12 +766,12 @@ async function viewDiff(owner, repo, number) {
               <span class="diff-stat-add">+${stats.additions}</span>
               <span class="diff-stat-del">-${stats.deletions}</span>
             </div>
-          </div>
-          <div class="diff-header-right">
             <div class="diff-view-toggle">
               <button id="diff-view-unified" class="btn btn-small btn-primary" onclick="switchDiffView('unified')">Unified</button>
               <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>
             </div>
+          </div>
+          <div class="diff-header-right">
             ${actionsHtml}
             <button class="btn btn-small btn-muted diff-close-btn" onclick="hideModal()" title="Close">&times;</button>
           </div>
