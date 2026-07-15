@@ -100,10 +100,12 @@ async function fetchRepoPRsGraphQL(repo) {
   const [owner, name] = repo.split('/');
   const prs = [];
   let cursor = null;
+  let lastRateLimit = null;
 
   for (;;) {
     const afterClause = cursor ? `, after: ${JSON.stringify(cursor)}` : '';
     const data = await githubGraphQL(`{
+      rateLimit { cost remaining limit resetAt used }
       repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
         pullRequests(first: 100, states: [OPEN]${afterClause}) {
           pageInfo { hasNextPage endCursor }
@@ -114,6 +116,8 @@ async function fetchRepoPRsGraphQL(repo) {
         }
       }
     }`);
+
+    if (data?.rateLimit) lastRateLimit = data.rateLimit;
 
     const page = data?.repository?.pullRequests;
     if (!page) break;
@@ -140,17 +144,26 @@ async function fetchRepoPRsGraphQL(repo) {
     cursor = page.pageInfo.endCursor;
   }
 
-  return prs;
+  return { prs, rateLimit: lastRateLimit };
 }
 
 // Fetch all open PRs across all repos concurrently (10 parallel GraphQL queries)
 async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
   const limit = pLimit(10);
   let done = 0;
+  let totalCost = 0;
+  let minRemaining = Infinity;
+  let rlMeta = null;
+
   const results = await Promise.all(
     repos.map(repo => limit(async () => {
       try {
-        const prs = await fetchRepoPRsGraphQL(repo);
+        const { prs, rateLimit } = await fetchRepoPRsGraphQL(repo);
+        if (rateLimit) {
+          totalCost += rateLimit.cost || 0;
+          if (rateLimit.remaining < minRemaining) minRemaining = rateLimit.remaining;
+          rlMeta = { limit: rateLimit.limit, resetAt: rateLimit.resetAt };
+        }
         if (onProgress) onProgress(++done, repos.length);
         return prs;
       } catch (err) {
@@ -160,11 +173,19 @@ async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
       }
     }))
   );
-  return results.flat();
+
+  const rateLimit = rlMeta ? {
+    cost: totalCost,
+    remaining: minRemaining === Infinity ? null : minRemaining,
+    limit: rlMeta.limit,
+    resetAt: rlMeta.resetAt,
+  } : null;
+
+  return { prs: results.flat(), rateLimit };
 }
 
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
-const prListCache = { prs: null, fetchedAt: 0 };
+const prListCache = { prs: null, fetchedAt: 0, rateInfo: null };
 const PR_LIST_TTL = 5 * 60 * 1000;
 
 // Cache for review statuses to handle transient API failures
@@ -483,9 +504,11 @@ app.get('/api/prs', async (req, res) => {
     } else {
       const { repos } = await getSubscribedRepos();
       if (repos.length > 0) {
-        prs = await fetchAllOpenPRsFromGitHub(repos, null);
+        const result = await fetchAllOpenPRsFromGitHub(repos, null);
+        prs = result.prs;
         prListCache.prs = prs;
         prListCache.fetchedAt = Date.now();
+        if (result.rateLimit) prListCache.rateInfo = { graphql: result.rateLimit, rest: null, fetchedAt: Date.now() };
       }
     }
     
@@ -575,6 +598,7 @@ app.get('/api/prs', async (req, res) => {
         ghSamples: ghFetchTimesMs.length,
         cacheHits: hitCount,
         cacheMisses: missCount,
+        rateInfo: prListCache.rateInfo || null,
       }
     });
   } catch (error) {
@@ -667,6 +691,17 @@ app.get('/metrics', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'metrics.html'));
 });
 
+app.get('/api/rate-limit', async (req, res) => {
+  try {
+    const rl = await githubGet('/rate_limit');
+    if (rl.status !== 200) return res.status(rl.status).json({ success: false });
+    const data = JSON.parse(rl.body);
+    res.json({ success: true, resources: data.resources, cached: prListCache.rateInfo || null });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -700,7 +735,7 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     sendProgress(2, `Querying ${repos.length} repos via GitHub GraphQL...`);
 
-    const prs = await fetchAllOpenPRsFromGitHub(repos, (done, total) => {
+    const { prs, rateLimit: graphqlRL } = await fetchAllOpenPRsFromGitHub(repos, (done, total) => {
       if (!aborted) {
         const pct = Math.round(2 + (done / total) * 93);
         sendProgress(pct, `${done}/${total} repos fetched...`);
@@ -709,9 +744,17 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     if (aborted) return;
 
+    // Fetch REST rate limits (exempt from rate limiting itself)
+    let restRL = null;
+    try {
+      const rl = await githubGet('/rate_limit');
+      if (rl.status === 200) restRL = JSON.parse(rl.body)?.resources?.core ?? null;
+    } catch (_) {}
+
     // Update in-memory cache
     prListCache.prs = prs;
     prListCache.fetchedAt = Date.now();
+    prListCache.rateInfo = { graphql: graphqlRL, rest: restRL, fetchedAt: Date.now() };
 
     // Write ghreport-format file for any external tooling that reads it
     const outputPath = process.env.GHREPORT_OUTPUT;

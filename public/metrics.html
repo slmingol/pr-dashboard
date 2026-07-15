@@ -122,6 +122,14 @@
     .response-summary-item strong { font-size: 1.15rem; font-weight: 700; display: block; }
     .response-summary-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.1rem; }
     .no-data { color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0; }
+
+    /* Rate limit bars */
+    .rl-row { display:flex; align-items:center; gap:0.6rem; padding:0.28rem 0; font-size:0.82rem; }
+    .rl-label { color:var(--text-muted); white-space:nowrap; flex-shrink:0; width:70px; }
+    .rl-track { flex:1; height:11px; background:var(--surface-hover); border-radius:6px; overflow:hidden; display:flex; min-width:0; }
+    .rl-seg { height:100%; flex-shrink:0; }
+    .rl-info { color:var(--text-muted); font-size:0.78rem; white-space:nowrap; flex-shrink:0; }
+    .rl-note { font-size:0.73rem; color:var(--text-muted); margin-top:0.5rem; }
   </style>
 </head>
 <body>
@@ -166,6 +174,11 @@
         <thead><tr><th>PR</th><th>Repo</th><th>Response</th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+
+    <div class="metrics-section" id="ratelimit-section">
+      <div class="metrics-section-title">GitHub API Rate Limits</div>
+      <div id="ratelimit-chart"></div>
     </div>
 
     <div class="metrics-two-col">
@@ -294,7 +307,7 @@ async function load() {
   const res = await fetch('/api/prs');
   const data = await res.json();
   if (!data.success) throw new Error(data.error);
-  return data.prs;
+  return { prs: data.prs, rateInfo: data.perf?.rateInfo || null };
 }
 
 function render(prs) {
@@ -512,12 +525,79 @@ function render(prs) {
   }
 }
 
+function renderRateLimit(rateInfo) {
+  const el = document.getElementById('ratelimit-chart');
+  if (!rateInfo || (!rateInfo.graphql && !rateInfo.rest)) {
+    document.getElementById('ratelimit-section').classList.add('hidden');
+    return;
+  }
+
+  const success = getCssVar('--success');
+  const warning = getCssVar('--warning');
+  const danger  = getCssVar('--danger');
+  const usageColor = (used, limit) => {
+    const p = limit > 0 ? used / limit : 0;
+    return p < 0.5 ? success : p < 0.8 ? warning : danger;
+  };
+
+  const rows = [];
+  if (rateInfo.graphql) {
+    const rl = rateInfo.graphql;
+    const used = (rl.limit ?? 5000) - (rl.remaining ?? 0);
+    const resetStr = rl.resetAt ? new Date(rl.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    rows.push({ label: 'GraphQL', used, remaining: rl.remaining ?? 0, limit: rl.limit ?? 5000, cost: rl.cost, resetStr });
+  }
+  if (rateInfo.rest) {
+    const rl = rateInfo.rest;
+    const used = (rl.limit ?? 5000) - (rl.remaining ?? 0);
+    const resetStr = rl.reset ? new Date(rl.reset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    rows.push({ label: 'REST', used, remaining: rl.remaining ?? 0, limit: rl.limit ?? 5000, cost: null, resetStr });
+  }
+
+  const barsHtml = rows.map(r => {
+    const usedPct  = r.limit > 0 ? Math.max(0, Math.min(100, r.used / r.limit * 100)) : 0;
+    const remPct   = r.limit > 0 ? Math.max(0, Math.min(100, r.remaining / r.limit * 100)) : 0;
+    const uc = usageColor(r.used, r.limit);
+    const costStr  = r.cost != null ? ` · ${r.cost} pts this refresh` : '';
+    const resetStr = r.resetStr ? ` · resets ${r.resetStr}` : '';
+    return `<div class="rl-row">
+      <span class="rl-label">${r.label}</span>
+      <div class="rl-track">
+        <div class="rl-seg" style="width:${usedPct.toFixed(1)}%;background:${uc}"></div>
+        <div class="rl-seg" style="width:${remPct.toFixed(1)}%;background:var(--surface-hover)"></div>
+      </div>
+      <span class="rl-info">${r.remaining.toLocaleString()} / ${r.limit.toLocaleString()} remaining${costStr}${resetStr}</span>
+    </div>`;
+  }).join('');
+
+  const tiles = rows.map(r => {
+    const pct = r.limit > 0 ? Math.round(r.remaining / r.limit * 100) : 0;
+    const c = usageColor(r.used, r.limit);
+    return `<div class="response-summary-item">
+      <strong style="color:${c}">${r.remaining.toLocaleString()}</strong>
+      <div class="response-summary-label">${r.label} remaining (${pct}%)</div>
+    </div>`;
+  });
+  const graphqlRow = rateInfo.graphql;
+  if (graphqlRow?.cost != null) {
+    tiles.push(`<div class="response-summary-item">
+      <strong style="color:var(--primary)">${graphqlRow.cost}</strong>
+      <div class="response-summary-label">pts last refresh</div>
+    </div>`);
+  }
+
+  el.innerHTML = barsHtml +
+    `<div class="response-summary-row" style="margin-top:0.85rem;border-bottom:none;padding-bottom:0">${tiles.join('')}</div>` +
+    `<div class="rl-note">Bar shows consumed (colored) vs available (gray) out of the 5,000-point hourly window. The /rate_limit endpoint and rateLimit GraphQL field are exempt from rate limiting.</div>`;
+}
+
 (async () => {
   try {
-    const prs = await load();
+    const { prs, rateInfo } = await load();
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('metrics-body').classList.remove('hidden');
     render(prs);
+    renderRateLimit(rateInfo);
   } catch (err) {
     document.getElementById('loading').classList.add('hidden');
     const errEl = document.getElementById('error');

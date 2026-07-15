@@ -217,6 +217,14 @@ function renderPerfBar() {
     parts.push(`GH: ${fmt(p.ghFetchMs)}${avgStr}`);
   }
   if (total > 0) parts.push(allCached ? `${total} cached` : `${p.cacheHits}/${total} cached`);
+  if (p.rateInfo?.graphql) {
+    const rl = p.rateInfo.graphql;
+    parts.push(`GraphQL: ${rl.remaining?.toLocaleString()}/${rl.limit?.toLocaleString()} (${rl.cost}pts)`);
+  }
+  if (p.rateInfo?.rest) {
+    const rl = p.rateInfo.rest;
+    parts.push(`REST: ${rl.remaining?.toLocaleString()}/${rl.limit?.toLocaleString()}`);
+  }
   document.getElementById('perf-bar').textContent = parts.join('  ·  ');
 }
 
