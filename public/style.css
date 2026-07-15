@@ -738,8 +738,8 @@ kbd {
 
 /* ── Diff modal ───────────────────────────────────────────────────────────── */
 .modal-diff {
-  width: min(1100px, 95vw);
-  min-width: min(900px, 95vw);
+  width: min(1300px, 95vw);
+  min-width: min(1100px, 95vw);
   height: 90vh;
   display: flex;
   flex-direction: column;
