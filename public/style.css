@@ -68,13 +68,18 @@ body {
 
 header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   margin-bottom: 1.5rem;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .header-actions {
@@ -946,14 +951,12 @@ label {
 }
 
 .perf-bar {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 700;
   font-family: var(--font-mono, monospace);
   color: var(--yellow);
   text-align: center;
-  flex: 1;
-  padding: 0 1rem;
-  min-width: 0;
+  padding-top: 0.45rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

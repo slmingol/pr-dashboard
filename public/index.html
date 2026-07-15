@@ -10,15 +10,17 @@
 <body>
   <div class="container">
     <header>
-      <h1>🔀 Pull Request Dashboard</h1>
-      <div id="perf-bar" class="perf-bar"></div>
-      <div class="header-actions">
-        <button id="analytics-btn" class="btn btn-muted" title="Analytics panel">📊</button>
-        <button id="keyboard-help-btn" class="btn btn-muted" title="Keyboard shortcuts (?)">⌨</button>
-        <button id="theme-toggle" class="btn btn-muted" title="Toggle theme">🌙</button>
-        <button id="refresh-ghreport-btn" class="btn btn-success" title="Run ghreport to fetch latest PRs">🔄 Refresh Data</button>
-        <button id="refresh-btn" class="btn btn-primary" title="Reload PR list from file">↻ Reload</button>
+      <div class="header-top">
+        <h1>🔀 Pull Request Dashboard</h1>
+        <div class="header-actions">
+          <button id="analytics-btn" class="btn btn-muted" title="Analytics panel">📊</button>
+          <button id="keyboard-help-btn" class="btn btn-muted" title="Keyboard shortcuts (?)">⌨</button>
+          <button id="theme-toggle" class="btn btn-muted" title="Toggle theme">🌙</button>
+          <button id="refresh-ghreport-btn" class="btn btn-success" title="Run ghreport to fetch latest PRs">🔄 Refresh Data</button>
+          <button id="refresh-btn" class="btn btn-primary" title="Reload PR list from file">↻ Reload</button>
+        </div>
       </div>
+      <div id="perf-bar" class="perf-bar"></div>
     </header>
 
     <!-- Progress bar for ghreport refresh -->
