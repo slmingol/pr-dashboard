@@ -746,6 +746,13 @@ kbd {
   overflow: hidden;
 }
 .modal-diff .close { display: none; }
+.modal-diff #modal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 .diff-close-btn { font-size: 1.1rem; line-height: 1; padding: 0.2rem 0.5rem; margin-left: 0.25rem; }
 
 .diff-scroll-area {
