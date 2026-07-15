@@ -1034,7 +1034,7 @@ function showModal(content) {
   modal.classList.remove('hidden');
 }
 
-function showModalWithHeader(title, body, { subtitle = '', rightHtml = '' } = {}) {
+function showModalWithHeader(title, body, { subtitle = '', rightHtml = '', maxWidth = '' } = {}) {
   showModal(`
     <div class="modal-header-bar">
       <div class="modal-header-left">
@@ -1048,7 +1048,9 @@ function showModalWithHeader(title, body, { subtitle = '', rightHtml = '' } = {}
     </div>
     <div class="modal-scroll-area">${body}</div>
   `);
-  document.querySelector('#modal .modal-content').classList.add('modal-panel');
+  const mc = document.querySelector('#modal .modal-content');
+  mc.classList.add('modal-panel');
+  mc.style.maxWidth = maxWidth || '';
 }
 
 function hideModal() {
@@ -1056,6 +1058,7 @@ function hideModal() {
   const mc = document.querySelector('#modal .modal-content');
   mc.classList.remove('modal-diff');
   mc.classList.remove('modal-panel');
+  mc.style.maxWidth = '';
 }
 
 // Comment modal functions
@@ -1302,7 +1305,7 @@ function showKeyboardHelp() {
         </tr>
       `).join('')}
     </table>
-  `);
+  `, { maxWidth: '480px' });
 }
 
 function showPerfHelp() {
