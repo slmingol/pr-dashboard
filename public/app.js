@@ -773,6 +773,7 @@ async function viewDiff(owner, repo, number) {
               <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>
             </div>
             ${actionsHtml}
+            <button class="btn btn-small btn-muted diff-close-btn" onclick="hideModal()" title="Close">&times;</button>
           </div>
         </div>
         <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
