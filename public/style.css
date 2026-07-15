@@ -913,18 +913,18 @@ kbd {
   min-width: 3rem; text-align: right; padding: 0 0.5rem;
   color: var(--text-muted); font-size: 0.75rem;
   user-select: none; flex-shrink: 0; border-right: 1px solid var(--border);
-  background: rgba(0,0,0,0.12);
+  background: var(--surface);
 }
-.diff-ln-empty { min-width: 3rem; flex-shrink: 0; background: rgba(0,0,0,0.12); border-right: 1px solid var(--border); }
+.diff-ln-empty { min-width: 3rem; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); }
 .diff-sign { padding: 0 0.4rem 0 0.5rem; flex-shrink: 0; color: var(--text-muted); }
 .diff-code { flex: 1; min-width: 0; padding-right: 0.5rem; }
 
 .diff-add           { background: rgba(110, 201, 120, 0.08); }
-.diff-add .diff-ln  { background: rgba(110, 201, 120, 0.15); border-right-color: rgba(110, 201, 120, 0.3); }
+.diff-add .diff-ln  { background: rgba(110, 201, 120, 0.2); border-right-color: rgba(110, 201, 120, 0.4); }
 .diff-add .diff-sign { color: var(--success); font-weight: 700; }
 
 .diff-remove           { background: rgba(232, 124, 115, 0.08); }
-.diff-remove .diff-ln  { background: rgba(232, 124, 115, 0.15); border-right-color: rgba(232, 124, 115, 0.3); }
+.diff-remove .diff-ln  { background: rgba(232, 124, 115, 0.2); border-right-color: rgba(232, 124, 115, 0.4); }
 .diff-remove .diff-sign { color: var(--danger); font-weight: 700; }
 
 .diff-hunk-bar {
