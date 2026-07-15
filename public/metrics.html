@@ -328,6 +328,10 @@ function render(prs) {
   const merged = prs.filter(p => p.state === 'MERGED');
   const drafts = open.filter(p => p.isDraft);
 
+  // Exclude watch-only repos from all review stats (you're not expected to review there)
+  const watchOnly = JSON.parse(localStorage.getItem('watchOnlyRepos') || '{}');
+  const openActive = open.filter(p => !watchOnly.hasOwnProperty(p.repo));
+
   // ── Summary cards ─────────────────────────────────────────────────
   document.getElementById('summary-grid').innerHTML = [
     { label: 'Open PRs', value: open.length,   color: C.success },
@@ -342,12 +346,12 @@ function render(prs) {
 
   // ── Review activity breakdown ─────────────────────────────────────
   const act = { APPROVED: 0, CHANGES_REQUESTED: 0, COMMENTED: 0, pending: 0 };
-  for (const pr of open) {
+  for (const pr of openActive) {
     const rs = pr.reviewStatus;
     if (rs?.hasReviewed && rs.state) act[rs.state] = (act[rs.state] || 0) + 1;
     else act.pending++;
   }
-  const actTotal = open.length;
+  const actTotal = openActive.length;
   const reviewed = actTotal - act.pending;
 
   // ── Coverage bar ───────────────────────────────────────────────────
@@ -392,7 +396,7 @@ function render(prs) {
     { label: '3 – 7 days', color: C.orange,  value: 0 },
     { label: '> 1 week',   color: C.danger,  value: 0 },
   ];
-  for (const pr of open) {
+  for (const pr of openActive) {
     const d = ageDays(pr);
     if      (d < 1) ageBuckets[0].value++;
     else if (d < 3) ageBuckets[1].value++;
@@ -404,7 +408,7 @@ function render(prs) {
 
   // ── Repo stacked bar chart ─────────────────────────────────────────
   const byRepo = {};
-  for (const pr of open) {
+  for (const pr of openActive) {
     const repo = pr.repo || pr.repository?.nameWithOwner || 'unknown';
     if (!byRepo[repo]) byRepo[repo] = { total: 0, reviewed: 0, pending: 0, drafts: 0 };
     byRepo[repo].total++;
@@ -430,7 +434,7 @@ function render(prs) {
 
   // ── Author table ───────────────────────────────────────────────────
   const byAuthor = {};
-  for (const pr of open) {
+  for (const pr of openActive) {
     const author = pr.author?.login || 'unknown';
     if (!byAuthor[author]) byAuthor[author] = { total: 0, reviewed: 0 };
     byAuthor[author].total++;
