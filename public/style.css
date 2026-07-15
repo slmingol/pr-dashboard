@@ -738,7 +738,8 @@ kbd {
 
 /* ── Diff modal ───────────────────────────────────────────────────────────── */
 .modal-diff {
-  max-width: 1100px;
+  width: min(1100px, 95vw);
+  min-width: min(900px, 95vw);
   height: 90vh;
   display: flex;
   flex-direction: column;
@@ -804,15 +805,15 @@ kbd {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.6rem;
   padding: 0.65rem 1.25rem;
   background: var(--surface-hover);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  white-space: nowrap;
 }
-.diff-header-left  { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.diff-header-right { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.diff-header-left  { display: flex; align-items: center; gap: 0.5rem; min-width: 0; overflow: hidden; }
+.diff-header-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
 .diff-header-repo  { font-weight: 600; font-size: 0.9rem; color: var(--text); }
 .diff-header-num   { color: var(--text-muted); font-size: 0.9rem; }
 .diff-header-stats { display: flex; gap: 0.45rem; align-items: center; margin-left: 0.35rem; padding-left: 0.6rem; border-left: 1px solid var(--border); }
