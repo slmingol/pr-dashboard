@@ -550,21 +550,128 @@ async function viewDetails(owner, repo, number) {
   }
 }
 
+function parseDiffStats(diffText) {
+  const lines = diffText.split('\n');
+  let files = 0, additions = 0, deletions = 0;
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) files++;
+    else if (line.startsWith('+') && !line.startsWith('+++')) additions++;
+    else if (line.startsWith('-') && !line.startsWith('---')) deletions++;
+  }
+  return { files, additions, deletions };
+}
+
+function parseFilenameFromDiff(diffLine) {
+  // diffLine: "diff --git a/foo/bar.js b/foo/bar.js"
+  const m = diffLine.match(/^diff --git a\/.+ b\/(.+)$/);
+  return m ? m[1] : diffLine;
+}
+
+function renderUnifiedDiff(diffText) {
+  const lines = diffText.split('\n');
+  const parts = [];
+  let leftLine = 1, rightLine = 1;
+  let pendingFile = null, pendingFileType = null;
+
+  function flushFile() {
+    if (pendingFile === null) return;
+    const typeClass = pendingFileType === 'new' ? ' diff-fh-new' : pendingFileType === 'del' ? ' diff-fh-del' : '';
+    const badge = pendingFileType === 'new'
+      ? '<span class="diff-file-badge diff-file-badge-added">added</span>'
+      : pendingFileType === 'del'
+        ? '<span class="diff-file-badge diff-file-badge-deleted">deleted</span>'
+        : '';
+    parts.push(`<div class="diff-file-sep${typeClass}"><span class="diff-filename">${escapeHtml(pendingFile)}</span>${badge}</div>`);
+    pendingFile = null;
+    pendingFileType = null;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('diff --git ')) {
+      flushFile();
+      pendingFile = parseFilenameFromDiff(line);
+      pendingFileType = null;
+    } else if (line.startsWith('new file')) {
+      pendingFileType = 'new';
+    } else if (line.startsWith('deleted file')) {
+      pendingFileType = 'del';
+    } else if (line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') ||
+               line.startsWith('similarity') || line.startsWith('rename') ||
+               line.startsWith('old mode') || line.startsWith('new mode')) {
+      // skip metadata
+    } else if (line.startsWith('Binary')) {
+      flushFile();
+      parts.push('<div class="diff-binary">Binary file — not shown</div>');
+    } else if (line.startsWith('@@')) {
+      flushFile();
+      const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/);
+      if (m) {
+        leftLine = parseInt(m[1], 10);
+        rightLine = parseInt(m[2], 10);
+        const range = escapeHtml(line.match(/^(@@ [^@]+ @@)/)[1]);
+        const ctx = escapeHtml(m[3]);
+        parts.push(`<div class="diff-hunk-bar"><span class="diff-hunk-range">${range}</span><span class="diff-hunk-ctx">${ctx}</span></div>`);
+      } else {
+        parts.push(`<div class="diff-hunk-bar"><span class="diff-hunk-range">${escapeHtml(line)}</span></div>`);
+      }
+    } else if (line === '\\ No newline at end of file') {
+      parts.push('<div class="diff-no-newline">\\ No newline at end of file</div>');
+    } else if (line.startsWith('+')) {
+      flushFile();
+      parts.push(`<div class="diff-line diff-add"><span class="diff-ln diff-ln-empty"></span><span class="diff-ln">${rightLine++}</span><span class="diff-sign">+</span><span class="diff-code">${escapeHtml(line.slice(1))}</span></div>`);
+    } else if (line.startsWith('-')) {
+      flushFile();
+      parts.push(`<div class="diff-line diff-remove"><span class="diff-ln">${leftLine++}</span><span class="diff-ln diff-ln-empty"></span><span class="diff-sign">-</span><span class="diff-code">${escapeHtml(line.slice(1))}</span></div>`);
+    } else if (line.startsWith(' ')) {
+      flushFile();
+      parts.push(`<div class="diff-line diff-ctx"><span class="diff-ln">${leftLine++}</span><span class="diff-ln">${rightLine++}</span><span class="diff-sign"> </span><span class="diff-code">${escapeHtml(line.slice(1))}</span></div>`);
+    }
+  }
+  flushFile();
+  return parts.length ? parts.join('') : '<div class="diff-empty">No changes</div>';
+}
+
 function buildSideBySideDiff(diffText) {
   const lines = diffText.split('\n');
   const rows = [];
   let i = 0;
+  let pendingFile = null, pendingFileType = null;
+
+  function flushFile() {
+    if (pendingFile === null) return;
+    rows.push({ type: 'file', filename: pendingFile, fileType: pendingFileType });
+    pendingFile = null;
+    pendingFileType = null;
+  }
+
   while (i < lines.length) {
     const line = lines[i];
-    if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') ||
-        line.startsWith('new file') || line.startsWith('deleted file') || line.startsWith('old mode') ||
-        line.startsWith('new mode') || line.startsWith('Binary') || line.startsWith('similarity') || line.startsWith('rename')) {
-      rows.push({ type: 'header', content: line });
+    if (line.startsWith('diff --git ')) {
+      flushFile();
+      pendingFile = parseFilenameFromDiff(line);
+      pendingFileType = null;
+      i++;
+    } else if (line.startsWith('new file')) {
+      pendingFileType = 'new';
+      i++;
+    } else if (line.startsWith('deleted file')) {
+      pendingFileType = 'del';
+      i++;
+    } else if (line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') ||
+               line.startsWith('similarity') || line.startsWith('rename') ||
+               line.startsWith('old mode') || line.startsWith('new mode')) {
+      i++;
+    } else if (line.startsWith('Binary')) {
+      flushFile();
+      rows.push({ type: 'binary' });
       i++;
     } else if (line.startsWith('@@')) {
+      flushFile();
       rows.push({ type: 'hunk', content: line });
       i++;
     } else if (line.startsWith('-') || line.startsWith('+')) {
+      flushFile();
       const removed = [];
       const added = [];
       while (i < lines.length && (lines[i].startsWith('-') || lines[i].startsWith('+'))) {
@@ -577,18 +684,28 @@ function buildSideBySideDiff(diffText) {
         rows.push({ type: 'change', left: j < removed.length ? removed[j] : null, right: j < added.length ? added[j] : null });
       }
     } else if (line.startsWith(' ')) {
+      flushFile();
       rows.push({ type: 'context', content: line.slice(1) });
       i++;
     } else {
       i++;
     }
   }
+  flushFile();
   return rows;
 }
 
 function renderSideBySideHtml(rows) {
   return '<table class="diff-table">' + rows.map(row => {
-    if (row.type === 'header') return `<tr class="diff-file-header"><td colspan="2">${escapeHtml(row.content)}</td></tr>`;
+    if (row.type === 'file') {
+      const badge = row.fileType === 'new'
+        ? '<span class="diff-file-badge diff-file-badge-added">added</span>'
+        : row.fileType === 'del'
+          ? '<span class="diff-file-badge diff-file-badge-deleted">deleted</span>'
+          : '';
+      return `<tr class="diff-file-sep-row"><td colspan="2"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
+    }
+    if (row.type === 'binary') return `<tr><td colspan="2" class="diff-binary">Binary file — not shown</td></tr>`;
     if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td colspan="2">${escapeHtml(row.content)}</td></tr>`;
     if (row.type === 'context') {
       const c = escapeHtml(row.content);
@@ -629,33 +746,39 @@ async function viewDiff(owner, repo, number) {
     const data = await response.json();
 
     if (data.success) {
-      const diffHtml = data.diff.split('\n').map(line => {
-        let className = 'diff-line';
-        if (line.startsWith('+') && !line.startsWith('+++')) className += ' diff-add';
-        if (line.startsWith('-') && !line.startsWith('---')) className += ' diff-remove';
-        return `<div class="${className}">${escapeHtml(line)}</div>`;
-      }).join('');
-
+      const stats = parseDiffStats(data.diff);
+      const unifiedHtml = renderUnifiedDiff(data.diff);
       const splitHtml = renderSideBySideHtml(buildSideBySideDiff(data.diff));
 
       const isWatchOnly = watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
-      const buttonsHtml = isWatchOnly ? '' : `<div class="diff-actions">
-        <button class="btn btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
-        <button class="btn btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
-        <button class="btn btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>
-      </div>`;
+      const actionsHtml = isWatchOnly ? '' : `
+        <button class="btn btn-small btn-success" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
+        <button class="btn btn-small btn-success" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
+        <button class="btn btn-small btn-danger" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>`;
 
       showModal(`
-        <h2>Diff for ${owner}/${repo} #${number}</h2>
-        ${buttonsHtml}
-        <div class="diff-view-toggle">
-          <button id="diff-view-unified" class="btn btn-small btn-primary" onclick="switchDiffView('unified')">Unified</button>
-          <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>
+        <div class="diff-header-bar">
+          <div class="diff-header-left">
+            <span class="diff-header-repo">${escapeHtml(owner)}/${escapeHtml(repo)}</span>
+            <span class="diff-header-num">#${number}</span>
+            <div class="diff-header-stats">
+              <span class="diff-stat-files">${stats.files} file${stats.files !== 1 ? 's' : ''}</span>
+              <span class="diff-stat-add">+${stats.additions}</span>
+              <span class="diff-stat-del">-${stats.deletions}</span>
+            </div>
+          </div>
+          <div class="diff-header-right">
+            <div class="diff-view-toggle">
+              <button id="diff-view-unified" class="btn btn-small btn-primary" onclick="switchDiffView('unified')">Unified</button>
+              <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>
+            </div>
+            ${actionsHtml}
+          </div>
         </div>
-        <div id="diff-unified-view" class="diff-container">${diffHtml}</div>
+        <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
         <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
-        ${buttonsHtml}
       `);
+      document.querySelector('#modal .modal-content').classList.add('modal-diff');
       const savedView = localStorage.getItem('diffView') || 'unified';
       switchDiffView(savedView);
     } else {
@@ -910,6 +1033,7 @@ function showModal(content) {
 
 function hideModal() {
   document.getElementById('modal').classList.add('hidden');
+  document.querySelector('#modal .modal-content').classList.remove('modal-diff');
 }
 
 // Comment modal functions
