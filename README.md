@@ -77,9 +77,24 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 ### Data refresh
 
-- **Refresh Data** -- queries all monitored repositories via concurrent GitHub GraphQL (10 parallel requests); ~7s for 100+ repos; streams real per-repo progress via SSE
+- **Refresh Data** -- queries all monitored repositories via 10 concurrent REST requests with ETag caching; typically ~7s for 100+ repos; streams real per-repo progress via SSE
 - **Reload** -- returns the cached PR list instantly (in-memory cache, 5-minute TTL) without hitting GitHub
-- **Performance bar** -- shows wall-clock refresh time, review-status fetch time, cache hit ratio, and GraphQL/REST rate limit consumption after every load
+- **Performance bar** -- displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
+
+#### Performance bar fields
+
+```
+refresh: 15.4s · GH: 11.3s · avg: 4.3s · 0/135 cached · 122/126 repos cached · REST: 4,979/5,000
+```
+
+| Field | What it measures |
+|---|---|
+| `refresh: Xs` | Wall-clock time for the complete Refresh Data cycle — from button click to dashboard update |
+| `GH: Xs` | Time spent fetching review statuses from GitHub REST API for PRs not in the local review cache. Only shown when at least one PR was a cache miss. |
+| `avg: Xs` | Rolling average of the last 10 GH review fetch durations |
+| `N/M cached` | Review status cache: N PRs had a valid cached status (no GitHub call); M is total PRs. 304 Not Modified responses keep the cached value at zero quota cost. |
+| `N/M repos cached` | PR list ETag cache: N repos returned 304 Not Modified (unchanged since last refresh, zero quota cost); M is total watched repos |
+| `REST: N/5,000` | GitHub REST API rate limit remaining in the current hourly window. The `/rate_limit` endpoint and ETag 304 responses are exempt and do not count against this total. |
 
 ### Metrics page (`/metrics`)
 
@@ -91,7 +106,7 @@ A separate analytics view covering:
 - **Open PRs by repo** -- stacked bars showing reviewed vs. pending per repository
 - **Review response time** -- histogram and table of time from PR open to your first review (last 45 days)
 - **Author breakdown** -- open PRs by author with reviewed/pending split
-- **GitHub API rate limits** -- bars showing GraphQL and REST consumption vs. the 5,000-point hourly window, with points consumed per refresh and reset times
+- **GitHub API rate limits** -- REST consumption bar vs. the 5,000-request hourly window; PR list ETag cache bar showing 304 (free) vs. 200 (quota) split per refresh, with reset time and % repos skipped
 
 ### UI/UX
 

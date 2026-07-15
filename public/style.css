@@ -960,7 +960,10 @@ label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  user-select: none;
 }
+.perf-bar:hover { opacity: 0.8; }
 
 /* ── Analytics panel ─────────────────────────────────────── */
 .analytics-panel {

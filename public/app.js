@@ -1142,7 +1142,7 @@ function showKeyboardHelp() {
     ['h',      'Hide / unhide PR'],
     ['o',      'Open PR in GitHub'],
     ['r',      'Reload PR list'],
-    ['R',      'Refresh ghreport data'],
+    ['R',      'Refresh data from GitHub'],
     ['/',      'Focus search'],
     ['?',      'Show this help'],
     ['Esc',    'Close modal'],
@@ -1156,6 +1156,41 @@ function showKeyboardHelp() {
           <td style="padding:0.35rem 0;color:var(--text-muted);font-size:0.875rem">${desc}</td>
         </tr>
       `).join('')}
+    </table>
+  `);
+}
+
+function showPerfHelp() {
+  const fields = [
+    ['refresh: Xs',        'Wall-clock time for the complete Refresh Data cycle — from button click to dashboard update. Includes the GitHub fetch, progress streaming, and page re-render.'],
+    ['GH: Xs',             'Time spent fetching review statuses from the GitHub REST API for PRs that were not in the local review cache. Only appears when at least one PR was a cache miss.'],
+    ['avg: Xs',            'Rolling average of the last 10 GH review fetch durations. Useful for spotting whether API latency is trending up between refreshes.'],
+    ['N/M cached',         'Review status cache: N PRs had a valid cached status and required no GitHub call. M is the total number of PRs. A 304 Not Modified response keeps the cached value and costs no quota.'],
+    ['N/M repos cached',   'PR list ETag cache: N repos returned 304 Not Modified, meaning their open-PR list is unchanged since the last refresh. Those repos cost zero rate-limit quota. M is the total number of watched repos.'],
+    ['REST: N/5,000',      'GitHub REST API rate limit remaining in the current hourly window. Resets every hour. The /rate_limit endpoint and ETag 304 responses are exempt and do not count against this total.'],
+  ];
+  showModal(`
+    <h2 style="margin-bottom:0.25rem">Performance Bar</h2>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1.25rem">
+      Displayed below the header after each load or refresh. Click any row for details.
+    </p>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th style="text-align:left;color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;padding:0 1.5rem 0.5rem 0;white-space:nowrap">Field</th>
+          <th style="text-align:left;color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;padding:0 0 0.5rem">What it measures</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${fields.map(([field, desc]) => `
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:0.6rem 1.5rem 0.6rem 0;white-space:nowrap;vertical-align:top">
+              <code style="background:var(--surface-hover);padding:0.15rem 0.4rem;border-radius:4px;font-size:0.8rem;color:var(--yellow)">${field}</code>
+            </td>
+            <td style="padding:0.6rem 0;color:var(--text-muted);font-size:0.85rem;line-height:1.5;vertical-align:top">${desc}</td>
+          </tr>
+        `).join('')}
+      </tbody>
     </table>
   `);
 }
@@ -1194,6 +1229,7 @@ function loadTheme() {
 
 // Event listeners
 document.getElementById('keyboard-help-btn').addEventListener('click', showKeyboardHelp);
+document.getElementById('perf-bar').addEventListener('click', () => { if (lastPerfData) showPerfHelp(); });
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
 document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
