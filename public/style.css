@@ -755,6 +755,17 @@ kbd {
 }
 .diff-close-btn { font-size: 1.1rem; line-height: 1; padding: 0.2rem 0.5rem; margin-left: 0.25rem; }
 
+.diff-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding: 0.65rem 1.25rem;
+  background: var(--surface-hover);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .diff-scroll-area {
   flex: 1;
   overflow-y: auto;

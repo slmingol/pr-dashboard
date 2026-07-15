@@ -780,6 +780,7 @@ async function viewDiff(owner, repo, number) {
           <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
           <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>
         </div>
+        ${actionsHtml ? `<div class="diff-footer-bar">${actionsHtml}</div>` : ''}
       `);
       document.querySelector('#modal .modal-content').classList.add('modal-diff');
       const savedView = localStorage.getItem('diffView') || 'unified';
