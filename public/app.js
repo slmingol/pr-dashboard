@@ -104,14 +104,14 @@ function loadFilterPrefs() {
   if (search !== null) document.getElementById('search').value = search;
   if (state !== null) document.getElementById('state-filter').value = state;
   if (showHidden !== null) document.getElementById('show-hidden').checked = showHidden === 'true';
-  document.getElementById('show-drafts').checked = showDrafts === null ? true : showDrafts === 'true';
+  document.getElementById('show-drafts').checked = showDrafts === null ? false : showDrafts === 'true';
 }
 
 function resetFilters() {
   document.getElementById('search').value = '';
   document.getElementById('state-filter').value = 'all';
   document.getElementById('show-hidden').checked = false;
-  document.getElementById('show-drafts').checked = true;
+  document.getElementById('show-drafts').checked = false;
   ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts'].forEach(k => localStorage.removeItem(k));
   filterAndRenderPRs();
 }
