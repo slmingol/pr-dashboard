@@ -10,81 +10,81 @@ const BASE = 'http://localhost:3000';
 
 const FAKE_PRS = [
   {
-    id: 'bandwidth/bw-agents#183', repo: 'bandwidth/bw-agents', number: 183,
-    title: 'Add network-data analytics plugin with Snowflake integration', url: '#',
+    id: 'acme-corp/platform#183', repo: 'acme-corp/platform', number: 183,
+    title: 'Add analytics pipeline with warehouse integration', url: '#',
     state: 'OPEN', isDraft: false,
     author: { login: 'jsmith' },
     createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
     reviewDecision: 'APPROVED',
-    repository: { nameWithOwner: 'bandwidth/bw-agents' },
+    repository: { nameWithOwner: 'acme-corp/platform' },
     metadata: { age: '2d', reviewDecision: 'APPROVED', mergeable: '' },
   },
   {
-    id: 'bandwidth/bw-agents#179', repo: 'bandwidth/bw-agents', number: 179,
-    title: 'Refactor skill loader to support deferred tool schemas', url: '#',
+    id: 'acme-corp/platform#179', repo: 'acme-corp/platform', number: 179,
+    title: 'Refactor plugin loader to support lazy-loaded modules', url: '#',
     state: 'OPEN', isDraft: false,
     author: { login: 'arao' },
     createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 7200000).toISOString(),
     reviewDecision: 'CHANGES_REQUESTED',
-    repository: { nameWithOwner: 'bandwidth/bw-agents' },
+    repository: { nameWithOwner: 'acme-corp/platform' },
     metadata: { age: '5d', reviewDecision: 'CHANGES_REQUESTED', mergeable: '' },
   },
   {
-    id: 'bandwidth/bw-platform#412', repo: 'bandwidth/bw-platform', number: 412,
-    title: 'Fix rate limit retry logic in GitHub API client', url: '#',
+    id: 'acme-corp/api-gateway#412', repo: 'acme-corp/api-gateway', number: 412,
+    title: 'Fix rate limit retry logic in upstream HTTP client', url: '#',
     state: 'OPEN', isDraft: false,
     author: { login: 'mchen' },
     createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 1800000).toISOString(),
     reviewDecision: null,
-    repository: { nameWithOwner: 'bandwidth/bw-platform' },
+    repository: { nameWithOwner: 'acme-corp/api-gateway' },
     metadata: { age: '1d', reviewDecision: '', mergeable: '' },
   },
   {
-    id: 'bandwidth/bw-platform#408', repo: 'bandwidth/bw-platform', number: 408,
-    title: 'Add ETag caching to PR list REST endpoint', url: '#',
+    id: 'acme-corp/api-gateway#408', repo: 'acme-corp/api-gateway', number: 408,
+    title: 'Add ETag caching to resource list endpoints', url: '#',
     state: 'OPEN', isDraft: false,
     author: { login: 'tpatel' },
     createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 5400000).toISOString(),
     reviewDecision: 'APPROVED',
-    repository: { nameWithOwner: 'bandwidth/bw-platform' },
+    repository: { nameWithOwner: 'acme-corp/api-gateway' },
     metadata: { age: '3d', reviewDecision: 'APPROVED', mergeable: '' },
   },
   {
-    id: 'bandwidth/bw-infra#89', repo: 'bandwidth/bw-infra', number: 89,
+    id: 'acme-corp/infra#89', repo: 'acme-corp/infra', number: 89,
     title: 'Bump node base image to 20-alpine for security patches', url: '#',
     state: 'OPEN', isDraft: false,
     author: { login: 'dlee' },
     createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 86400000).toISOString(),
     reviewDecision: null,
-    repository: { nameWithOwner: 'bandwidth/bw-infra' },
+    repository: { nameWithOwner: 'acme-corp/infra' },
     metadata: { age: '7d', reviewDecision: '', mergeable: '' },
   },
   {
-    id: 'bandwidth/bw-infra#87', repo: 'bandwidth/bw-infra', number: 87,
+    id: 'acme-corp/infra#87', repo: 'acme-corp/infra', number: 87,
     title: 'Update Helm chart tolerations for spot instance nodes', url: '#',
     state: 'OPEN', isDraft: true,
     author: { login: 'rwalker' },
     createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 3600000).toISOString(),
     reviewDecision: null,
-    repository: { nameWithOwner: 'bandwidth/bw-infra' },
+    repository: { nameWithOwner: 'acme-corp/infra' },
     metadata: { age: '4d', reviewDecision: '', mergeable: '' },
   },
 ];
 
 const FAKE_REPOS = [
-  'bandwidth/bw-agents', 'bandwidth/bw-platform', 'bandwidth/bw-infra',
-  'bandwidth/bw-api', 'bandwidth/bw-auth', 'bandwidth/bw-billing',
-  'bandwidth/bw-cdr', 'bandwidth/bw-compliance', 'bandwidth/bw-data',
-  'bandwidth/bw-deploy', 'bandwidth/bw-docs', 'bandwidth/bw-frontend',
-  'bandwidth/bw-gateway', 'bandwidth/bw-identity', 'bandwidth/bw-jobs',
-  'bandwidth/bw-kafka', 'bandwidth/bw-metrics', 'bandwidth/bw-notifications',
-  'bandwidth/bw-portal', 'bandwidth/bw-reporting',
+  'acme-corp/platform', 'acme-corp/api-gateway', 'acme-corp/infra',
+  'acme-corp/auth-service', 'acme-corp/billing', 'acme-corp/data-pipeline',
+  'acme-corp/deploy', 'acme-corp/docs', 'acme-corp/frontend',
+  'acme-corp/identity', 'acme-corp/jobs', 'acme-corp/kafka-consumers',
+  'acme-corp/metrics', 'acme-corp/notifications', 'acme-corp/portal',
+  'acme-corp/reporting', 'acme-corp/search', 'acme-corp/storage',
+  'acme-corp/webhooks', 'acme-corp/worker',
 ];
 
 const FAKE_PERF = {
@@ -94,8 +94,8 @@ const FAKE_PERF = {
 };
 
 async function injectFakeData(page) {
-  await page.evaluate((prs, repos, perf) => {
-    // Patch fetch so /api/prs returns fake data
+  // evaluateOnNewDocument runs before any page scripts, surviving page.goto()
+  await page.evaluateOnNewDocument((prs, repos, perf) => {
     const origFetch = window.fetch.bind(window);
     window.fetch = async (url, opts) => {
       if (url === '/api/prs' || url.startsWith('/api/prs?')) {
