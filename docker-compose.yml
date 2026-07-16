@@ -1,6 +1,9 @@
 services:
   pr-dashboard:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-dev}
     container_name: pr-dashboard
     ports:
       - "3000:3000"

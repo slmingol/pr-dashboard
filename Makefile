@@ -4,6 +4,12 @@
 RUNTIME := $(shell command -v podman 2>/dev/null | xargs basename 2>/dev/null || echo docker)
 COMPOSE  := $(RUNTIME) compose
 
+# Build version: base semver + git commit count + short SHA
+_BASE    := $(shell node -p "require('./package.json').version" 2>/dev/null || echo 1.0.0)
+_COUNT   := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+_SHA     := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_VERSION := $(_BASE)-$(_COUNT).$(_SHA)
+
 # ─── Help ────────────────────────────────────────────────────────────────────
 
 list:
@@ -41,7 +47,7 @@ shell:
 # ─── Production ──────────────────────────────────────────────────────────────
 
 build:
-	$(COMPOSE) -f docker-compose.yml up -d --build
+	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml up -d --build
 
 prod: build
 

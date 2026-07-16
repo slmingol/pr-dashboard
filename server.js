@@ -675,7 +675,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/version', (req, res) => {
-  const { version } = require('./package.json');
+  const version = process.env.APP_VERSION || require('./package.json').version;
   res.json({ version });
 });
 

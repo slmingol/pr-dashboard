@@ -12,6 +12,9 @@ RUN git clone --depth=1 https://github.com/slmingol/ghreport /tmp/ghreport \
     && rm -rf /tmp/ghreport
 
 
+ARG BUILD_VERSION=dev
+ENV APP_VERSION=$BUILD_VERSION
+
 WORKDIR /app
 
 # Copy package files
