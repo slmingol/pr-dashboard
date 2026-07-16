@@ -351,14 +351,13 @@ async function fetchReviewStatusRest(prs, username) {
 
 // ─── Per-PR review check (used for post-submit refresh and stale fallback) ────
 
-// Check if current user has reviewed a PR and get updatedAt (with caching and retry).
-// skipCache bypasses the TTL check — used when REST errored and we need fresh data.
-async function checkUserReview(owner, repo, number, username, retries = 2, skipCache = false) {
+// Check if current user has reviewed a PR and get updatedAt (with caching and retry)
+async function checkUserReview(owner, repo, number, username, retries = 2) {
   const cacheKey = `${owner}/${repo}#${number}`;
 
-  // Check cache first (unless caller explicitly wants a fresh fetch)
+  // Check cache first
   const cached = reviewCache.get(cacheKey);
-  if (!skipCache && cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
     console.log(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
     return { ...cached.status, cachedAt: cached.timestamp };
   }
@@ -519,27 +518,23 @@ app.get('/api/prs', async (req, res) => {
         ghFetchMs = Date.now() - ghFetchStart;
       }
 
-      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
-      // Skip PRs that errored — they go to the gh fallback below for fresh data.
+      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases)
       for (const pr of misses) {
         const key = `${pr.repo}#${pr.number}`;
-        if (restErrors.has(key)) continue;
         const cached = reviewCache.get(key);
         if (cached?.status) hits[key] = { ...cached.status, cachedAt: cached.timestamp };
       }
 
-      // For anything still not resolved (no REST result, no cache, or REST errored):
-      // fall back to gh pr view which goes through the gh CLI and bypasses any
-      // direct-HTTPS connectivity issues.
+      // For anything still not resolved (no REST result and no cache): fall back to
+      // gh pr view which goes through the gh CLI and bypasses direct-HTTPS issues.
       const stillMissing = misses.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
         console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
         await Promise.all(stillMissing.map(async pr => {
           const [owner, repo] = pr.repo.split('/');
           const key = `${pr.repo}#${pr.number}`;
-          const skipCache = restErrors.has(key);
           try {
-            const status = await checkUserReview(owner, repo, pr.number, currentUser, 2, skipCache);
+            const status = await checkUserReview(owner, repo, pr.number, currentUser);
             hits[key] = status;
           } catch (_) {}
         }));

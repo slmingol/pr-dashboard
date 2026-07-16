@@ -944,7 +944,7 @@ async function reviewPR(owner, repo, number, action) {
       hideCommentModal();
       showToast('Review submitted successfully', 'success');
       // Wait a moment for GitHub API to update, then refresh
-      setTimeout(() => fetchPRs(true), 1000);
+      setTimeout(() => fetchPRs(), 1000);
     } else {
       hideCommentModal();
       showToast('Failed to submit review: ' + data.error, 'error');
@@ -976,7 +976,7 @@ async function approvePRFromDiff(owner, repo, number) {
       setTimeout(() => {
         showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(true), 1000);
+        setTimeout(() => fetchPRs(), 1000);
       }, 50);
     } else {
       console.error('Review failed:', data.error);
@@ -1024,7 +1024,7 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
       setTimeout(() => {
         showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(true), 1000);
+        setTimeout(() => fetchPRs(), 1000);
       }, 50);
     } else {
       console.error('Review failed:', data.error);
@@ -1067,7 +1067,7 @@ async function requestChangesFromDiff(owner, repo, number) {
       setTimeout(() => {
         showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(true), 1000);
+        setTimeout(() => fetchPRs(), 1000);
       }, 50);
     } else {
       hideCommentModal();
