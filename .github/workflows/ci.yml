@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute build version
+        id: version
+        run: |
+          TAG=$(git tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]' | head -1)
+          if [ -n "$TAG" ]; then
+            VERSION="${TAG#v}"
+          else
+            BASE=$(node -p "require('./package.json').version")
+            COUNT=$(git rev-list --count HEAD)
+            SHA=$(git rev-parse --short HEAD)
+            VERSION="${BASE}-${COUNT}.${SHA}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Build version: $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          build-args: |
+            BUILD_VERSION=${{ steps.version.outputs.version }}
+          tags: pr-dashboard:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
