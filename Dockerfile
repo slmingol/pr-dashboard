@@ -12,9 +12,6 @@ RUN git clone --depth=1 https://github.com/slmingol/ghreport /tmp/ghreport \
     && rm -rf /tmp/ghreport
 
 
-ARG BUILD_VERSION=dev
-ENV APP_VERSION=$BUILD_VERSION
-
 WORKDIR /app
 
 # Copy package files
@@ -29,6 +26,10 @@ COPY public ./public
 
 # Create data directory for ghreport output
 RUN mkdir -p /data
+
+# Bake build version — placed after COPY so file changes bust cache independently
+ARG BUILD_VERSION=dev
+ENV APP_VERSION=$BUILD_VERSION
 
 # Expose port
 EXPOSE 3000
