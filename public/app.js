@@ -276,14 +276,21 @@ async function fetchPRs() {
       // Detect new PRs since last refresh
       const currentPRIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
       
-      // Unhide hidden PRs where the user's review was dismissed (new commits invalidated it)
+      // Unhide hidden PRs where the user's review was dismissed by NEW commits pushed
+      // after the PR was hidden (not if allDismissed was already true when it was hidden)
       let unhiddenCount = 0;
       for (const pr of allPRs) {
         const prId = `${pr.repo}#${pr.number}`;
-        if (hiddenPRs[prId] && pr.reviewStatus?.allDismissed) {
-          delete hiddenPRs[prId];
-          pr.isNew = true;
-          unhiddenCount++;
+        const hiddenEntry = hiddenPRs[prId];
+        if (hiddenEntry && pr.reviewStatus?.allDismissed) {
+          const hiddenAt = hiddenEntry.hiddenAt;
+          const prUpdatedAt = pr.updatedAt;
+          // Only resurface if the PR was updated after it was hidden
+          if (hiddenAt && prUpdatedAt && new Date(prUpdatedAt) > new Date(hiddenAt)) {
+            delete hiddenPRs[prId];
+            pr.isNew = true;
+            unhiddenCount++;
+          }
         }
       }
       if (unhiddenCount > 0) {

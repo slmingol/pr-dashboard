@@ -980,8 +980,8 @@ col.diff-split-ln-col { width: 3rem; }
   border-top: 1px solid rgba(56, 139, 253, 0.15);
   border-bottom: 1px solid rgba(56, 139, 253, 0.15);
 }
-.diff-split-remove { background: rgba(248, 81, 73, 0.2); }
-.diff-split-add    { background: rgba(63, 185, 80, 0.2); }
+.diff-split-remove { background: rgba(248, 81, 73, 0.2); color: var(--text); }
+.diff-split-add    { background: rgba(63, 185, 80, 0.2); color: var(--text); }
 .diff-split-empty  { background: #191817; }
 .diff-split-context {}
 
