@@ -944,8 +944,8 @@ kbd {
 }
 
 /* Split view table */
-.diff-table { min-width: 100%; border-collapse: collapse; }
-.diff-table td { min-width: 300px; padding: 0 0.4rem; white-space: pre; vertical-align: top; }
+.diff-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.diff-table td { padding: 0 0.4rem; white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
 
 .diff-file-sep-row td {
   background: rgba(124, 179, 224, 0.07);
