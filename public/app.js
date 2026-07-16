@@ -635,6 +635,7 @@ function buildSideBySideDiff(diffText) {
   const lines = diffText.split('\n');
   const rows = [];
   let i = 0;
+  let leftLine = 1, rightLine = 1;
   let pendingFile = null, pendingFileType = null;
 
   function flushFile() {
@@ -642,6 +643,8 @@ function buildSideBySideDiff(diffText) {
     rows.push({ type: 'file', filename: pendingFile, fileType: pendingFileType });
     pendingFile = null;
     pendingFileType = null;
+    leftLine = 1;
+    rightLine = 1;
   }
 
   while (i < lines.length) {
@@ -667,24 +670,29 @@ function buildSideBySideDiff(diffText) {
       i++;
     } else if (line.startsWith('@@')) {
       flushFile();
+      const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (m) { leftLine = parseInt(m[1], 10); rightLine = parseInt(m[2], 10); }
       rows.push({ type: 'hunk', content: line });
       i++;
     } else if (line.startsWith('-') || line.startsWith('+')) {
       flushFile();
-      const removed = [];
-      const added = [];
+      const removed = [], added = [];
       while (i < lines.length && (lines[i].startsWith('-') || lines[i].startsWith('+'))) {
-        if (lines[i].startsWith('-')) removed.push(lines[i].slice(1));
-        else added.push(lines[i].slice(1));
+        if (lines[i].startsWith('-')) removed.push({ content: lines[i].slice(1), ln: leftLine++ });
+        else added.push({ content: lines[i].slice(1), ln: rightLine++ });
         i++;
       }
       const maxLen = Math.max(removed.length, added.length);
       for (let j = 0; j < maxLen; j++) {
-        rows.push({ type: 'change', left: j < removed.length ? removed[j] : null, right: j < added.length ? added[j] : null });
+        rows.push({
+          type: 'change',
+          left: j < removed.length ? removed[j].content : null, leftLn: j < removed.length ? removed[j].ln : null,
+          right: j < added.length ? added[j].content : null, rightLn: j < added.length ? added[j].ln : null,
+        });
       }
     } else if (line.startsWith(' ')) {
       flushFile();
-      rows.push({ type: 'context', content: line.slice(1) });
+      rows.push({ type: 'context', content: line.slice(1), leftLn: leftLine++, rightLn: rightLine++ });
       i++;
     } else {
       i++;
@@ -695,28 +703,65 @@ function buildSideBySideDiff(diffText) {
 }
 
 function renderSideBySideHtml(rows) {
-  return '<table class="diff-table"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>' + rows.map(row => {
+  const ln = (n, cls) => `<td class="diff-split-ln${cls ? ' ' + cls : ''}">${n !== null ? n : ''}</td>`;
+  return '<table class="diff-table"><colgroup><col class="diff-split-ln-col"><col><col class="diff-split-ln-col"><col></colgroup>' + rows.map(row => {
     if (row.type === 'file') {
       const badge = row.fileType === 'new'
         ? '<span class="diff-file-badge diff-file-badge-added">added</span>'
         : row.fileType === 'del'
           ? '<span class="diff-file-badge diff-file-badge-deleted">deleted</span>'
           : '';
-      return `<tr class="diff-file-sep-row"><td colspan="2"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
+      return `<tr class="diff-file-sep-row"><td colspan="4"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
     }
-    if (row.type === 'binary') return `<tr><td colspan="2" class="diff-binary">Binary file — not shown</td></tr>`;
-    if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td colspan="2">${escapeHtml(row.content)}</td></tr>`;
+    if (row.type === 'binary') return `<tr><td colspan="4" class="diff-binary">Binary file — not shown</td></tr>`;
+    if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td colspan="4">${escapeHtml(row.content)}</td></tr>`;
     if (row.type === 'context') {
       const c = escapeHtml(row.content);
-      return `<tr><td class="diff-split-context">${c}</td><td class="diff-split-context">${c}</td></tr>`;
+      return `<tr>${ln(row.leftLn, '')}<td class="diff-split-context">${c}</td>${ln(row.rightLn, '')}<td class="diff-split-context">${c}</td></tr>`;
     }
     if (row.type === 'change') {
-      const leftClass = row.left !== null ? 'diff-split-remove' : 'diff-split-empty';
-      const rightClass = row.right !== null ? 'diff-split-add' : 'diff-split-empty';
-      return `<tr><td class="${leftClass}">${row.left !== null ? escapeHtml(row.left) : ''}</td><td class="${rightClass}">${row.right !== null ? escapeHtml(row.right) : ''}</td></tr>`;
+      const leftCode = row.left !== null ? escapeHtml(row.left) : '';
+      const rightCode = row.right !== null ? escapeHtml(row.right) : '';
+      const leftLnCls = row.left !== null ? 'diff-split-ln-remove' : 'diff-split-ln-empty';
+      const rightLnCls = row.right !== null ? 'diff-split-ln-add' : 'diff-split-ln-empty';
+      const leftCls = row.left !== null ? 'diff-split-remove' : 'diff-split-empty';
+      const rightCls = row.right !== null ? 'diff-split-add' : 'diff-split-empty';
+      return `<tr>${ln(row.leftLn, leftLnCls)}<td class="${leftCls}">${leftCode}</td>${ln(row.rightLn, rightLnCls)}<td class="${rightCls}">${rightCode}</td></tr>`;
     }
     return '';
   }).join('') + '</table>';
+}
+
+const EXT_TO_LANG = {
+  js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+  py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+  java: 'java', kt: 'kotlin', scala: 'scala', cs: 'csharp',
+  cpp: 'cpp', cc: 'cpp', c: 'c', h: 'c', hpp: 'cpp',
+  tf: 'hcl', hcl: 'hcl',
+  sh: 'bash', bash: 'bash', zsh: 'bash',
+  yml: 'yaml', yaml: 'yaml', json: 'json', toml: 'ini',
+  css: 'css', scss: 'scss', less: 'less', html: 'html', xml: 'xml',
+  md: 'markdown', sql: 'sql', php: 'php', swift: 'swift', r: 'r',
+  lua: 'lua', ex: 'elixir', exs: 'elixir', hs: 'haskell',
+};
+
+function detectDiffLang(diffText) {
+  const m = diffText.match(/^diff --git a\/.+?\.(\w+)\s/m);
+  if (!m) return null;
+  return EXT_TO_LANG[m[1].toLowerCase()] || null;
+}
+
+function applySyntaxHighlighting(diffText) {
+  if (!window.hljs) return;
+  const lang = detectDiffLang(diffText);
+  if (!lang) return;
+  const opts = { language: lang, ignoreIllegals: true };
+  document.querySelectorAll('#diff-unified-view .diff-code').forEach(el => {
+    try { el.innerHTML = hljs.highlight(el.textContent, opts).value; } catch (_) {}
+  });
+  document.querySelectorAll('#diff-split-view td.diff-split-context, #diff-split-view td.diff-split-remove, #diff-split-view td.diff-split-add').forEach(el => {
+    try { el.innerHTML = hljs.highlight(el.textContent, opts).value; } catch (_) {}
+  });
 }
 
 function switchDiffView(view) {
@@ -784,6 +829,7 @@ async function viewDiff(owner, repo, number) {
       document.querySelector('#modal .modal-content').classList.add('modal-diff');
       const savedView = localStorage.getItem('diffView') || 'unified';
       switchDiffView(savedView);
+      applySyntaxHighlighting(data.diff);
     } else {
       const errorMsg = data.error || 'Unknown error';
       if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
