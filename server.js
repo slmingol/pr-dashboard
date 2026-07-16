@@ -267,10 +267,11 @@ function processReviewData(data, username) {
 // zero primary rate-limit points when PR/review data is unchanged.
 
 async function fetchReviewStatusRest(prs, username) {
-  if (prs.length === 0) return {};
+  if (prs.length === 0) return { results: {}, restErrors: new Set() };
 
   const limit = pLimit(8);
   const results = {};
+  const restErrors = new Set(); // keys that failed — callers should use gh fallback
   let fetched = 0, notModified = 0, errors = 0;
 
   await Promise.all(prs.map(pr => limit(async () => {
@@ -301,7 +302,7 @@ async function fetchReviewStatusRest(prs, username) {
         ? JSON.parse(rvRes.body).map(r => ({ user: r.user, state: r.state, submitted_at: r.submitted_at }))
         : (cached?.rawReviews || []);
 
-      if (!rawPr) { errors++; return; }
+      if (!rawPr) { errors++; restErrors.add(key); return; }
 
       const prMeta = {
         title: rawPr.title,
@@ -340,22 +341,24 @@ async function fetchReviewStatusRest(prs, username) {
     } catch (err) {
       console.error(`REST fetch error for ${key}: ${err.message}`);
       errors++;
+      restErrors.add(key);
     }
   })));
 
   console.log(`REST+ETag: ${fetched} fetched, ${notModified} not-modified (304), ${errors} errors — ${prs.length} misses total`);
-  return results;
+  return { results, restErrors };
 }
 
 // ─── Per-PR review check (used for post-submit refresh and stale fallback) ────
 
-// Check if current user has reviewed a PR and get updatedAt (with caching and retry)
-async function checkUserReview(owner, repo, number, username, retries = 2) {
+// Check if current user has reviewed a PR and get updatedAt (with caching and retry).
+// skipCache bypasses the TTL check — used when REST errored and we need fresh data.
+async function checkUserReview(owner, repo, number, username, retries = 2, skipCache = false) {
   const cacheKey = `${owner}/${repo}#${number}`;
-  
-  // Check cache first
+
+  // Check cache first (unless caller explicitly wants a fresh fetch)
   const cached = reviewCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+  if (!skipCache && cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
     console.log(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
     return { ...cached.status, cachedAt: cached.timestamp };
   }
@@ -462,6 +465,7 @@ app.get('/api/user', async (req, res) => {
 app.get('/api/prs', async (req, res) => {
   try {
     let prs;
+    const forceReviewRefresh = req.query.force === '1';
 
     // Prefer in-memory cache (populated by the SSE refresh)
     if (prListCache.prs && (Date.now() - prListCache.fetchedAt) < PR_LIST_TTL) {
@@ -489,13 +493,15 @@ app.get('/api/prs', async (req, res) => {
     if (currentUser) {
       const now = Date.now();
 
-      // Split PRs into cache hits and misses
+      // Split PRs into cache hits and misses.
+      // forceReviewRefresh treats everything as a miss so ETags still run but stale
+      // data is never served — picks up reviews submitted directly on GitHub.
       const hits = {};
       const misses = [];
       for (const pr of prs) {
         const key = `${pr.repo}#${pr.number}`;
         const cached = reviewCache.get(key);
-        if (cached && (now - cached.timestamp) < CACHE_TTL) {
+        if (!forceReviewRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
           hits[key] = { ...cached.status, cachedAt: cached.timestamp };
         } else {
           misses.push(pr);
@@ -507,27 +513,34 @@ app.get('/api/prs', async (req, res) => {
 
       // Fetch misses via REST+ETag (parallel, concurrency-limited)
       const ghFetchStart = Date.now();
+      let restErrors = new Set();
       if (misses.length > 0) {
-        await fetchReviewStatusRest(misses, currentUser);
+        ({ restErrors } = await fetchReviewStatusRest(misses, currentUser));
         ghFetchMs = Date.now() - ghFetchStart;
       }
 
-      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases)
+      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
+      // Skip PRs that errored — they go to the gh fallback below for fresh data.
       for (const pr of misses) {
         const key = `${pr.repo}#${pr.number}`;
+        if (restErrors.has(key)) continue;
         const cached = reviewCache.get(key);
         if (cached?.status) hits[key] = { ...cached.status, cachedAt: cached.timestamp };
       }
 
-      // For anything still not resolved: fall back to individual gh pr view call
+      // For anything still not resolved (no REST result, no cache, or REST errored):
+      // fall back to gh pr view which goes through the gh CLI and bypasses any
+      // direct-HTTPS connectivity issues.
       const stillMissing = misses.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
         console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
         await Promise.all(stillMissing.map(async pr => {
           const [owner, repo] = pr.repo.split('/');
+          const key = `${pr.repo}#${pr.number}`;
+          const skipCache = restErrors.has(key);
           try {
-            const status = await checkUserReview(owner, repo, pr.number, currentUser);
-            hits[`${pr.repo}#${pr.number}`] = status;
+            const status = await checkUserReview(owner, repo, pr.number, currentUser, 2, skipCache);
+            hits[key] = status;
           } catch (_) {}
         }));
       }

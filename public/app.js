@@ -230,12 +230,12 @@ function renderPerfBar() {
 }
 
 // Fetch PRs from API
-async function fetchPRs() {
+async function fetchPRs(force = false) {
   showLoading(true);
   hideError();
-  
+
   try {
-    const response = await fetch('/api/prs');
+    const response = await fetch(force ? '/api/prs?force=1' : '/api/prs');
     const data = await response.json();
     
     if (data.success) {
@@ -944,7 +944,7 @@ async function reviewPR(owner, repo, number, action) {
       hideCommentModal();
       showToast('Review submitted successfully', 'success');
       // Wait a moment for GitHub API to update, then refresh
-      setTimeout(() => fetchPRs(), 1000);
+      setTimeout(() => fetchPRs(true), 1000);
     } else {
       hideCommentModal();
       showToast('Failed to submit review: ' + data.error, 'error');
@@ -976,7 +976,7 @@ async function approvePRFromDiff(owner, repo, number) {
       setTimeout(() => {
         showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(), 1000);
+        setTimeout(() => fetchPRs(true), 1000);
       }, 50);
     } else {
       console.error('Review failed:', data.error);
@@ -1024,7 +1024,7 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
       setTimeout(() => {
         showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(), 1000);
+        setTimeout(() => fetchPRs(true), 1000);
       }, 50);
     } else {
       console.error('Review failed:', data.error);
@@ -1067,7 +1067,7 @@ async function requestChangesFromDiff(owner, repo, number) {
       setTimeout(() => {
         showToast(`✗ Requested changes on PR #${number}`, 'success', 'Review Submitted');
         // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(), 1000);
+        setTimeout(() => fetchPRs(true), 1000);
       }, 50);
     } else {
       hideCommentModal();
@@ -1234,7 +1234,7 @@ async function refreshGhReport() {
         showToast(`✓ Refreshed PR data. Found ${data.prCount} PRs.`, 'success', 'Data Refreshed');
         // Automatically reload the PR list after successful refresh
         setTimeout(async () => {
-          await fetchPRs();
+          await fetchPRs(true);
           lastRefreshWallMs = Math.round(performance.now() - wallStart);
           renderPerfBar(); // re-render with the now-correct wall time
           progressContainer.classList.add('hidden');
@@ -1429,7 +1429,7 @@ document.getElementById('keyboard-help-btn').addEventListener('click', showKeybo
 document.getElementById('perf-bar').addEventListener('click', () => { if (lastPerfData) showPerfHelp(); });
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
-document.getElementById('refresh-btn').addEventListener('click', fetchPRs);
+document.getElementById('refresh-btn').addEventListener('click', () => fetchPRs(true));
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
 document.getElementById('show-hidden').addEventListener('change', filterAndRenderPRs);
@@ -1481,7 +1481,7 @@ document.addEventListener('keydown', (e) => {
     case 'c': commentSelected(); break;
     case 'h': hideSelected(); break;
     case 'o': openSelected(); break;
-    case 'r': fetchPRs(); break;
+    case 'r': fetchPRs(true); break;
     case 'R': refreshGhReport(); break;
     case '/': e.preventDefault(); document.getElementById('search').focus(); break;
     case '?': showKeyboardHelp(); break;
