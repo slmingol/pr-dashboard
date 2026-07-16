@@ -919,13 +919,13 @@ kbd {
 .diff-sign { padding: 0 0.4rem 0 0.5rem; flex-shrink: 0; color: var(--text-muted); }
 .diff-code { flex: 1; min-width: 0; padding-right: 0.5rem; }
 
-.diff-add           { background: rgba(110, 201, 120, 0.08); }
-.diff-add .diff-ln  { background: rgba(110, 201, 120, 0.2); border-right-color: rgba(110, 201, 120, 0.4); }
-.diff-add .diff-sign { color: var(--success); font-weight: 700; }
+.diff-add           { background: rgba(63, 185, 80, 0.15); }
+.diff-add .diff-ln  { background: rgba(63, 185, 80, 0.3); border-right-color: rgba(63, 185, 80, 0.5); color: #3fb950; }
+.diff-add .diff-sign { color: #3fb950; font-weight: 700; }
 
-.diff-remove           { background: rgba(232, 124, 115, 0.08); }
-.diff-remove .diff-ln  { background: rgba(232, 124, 115, 0.2); border-right-color: rgba(232, 124, 115, 0.4); }
-.diff-remove .diff-sign { color: var(--danger); font-weight: 700; }
+.diff-remove           { background: rgba(248, 81, 73, 0.15); }
+.diff-remove .diff-ln  { background: rgba(248, 81, 73, 0.3); border-right-color: rgba(248, 81, 73, 0.5); color: #f85149; }
+.diff-remove .diff-sign { color: #f85149; font-weight: 700; }
 
 .diff-hunk-bar {
   padding: 0.15rem 0.5rem 0.15rem calc(6rem + 1.2rem);
@@ -961,8 +961,9 @@ col.diff-split-ln-col { width: 3rem; }
   border-right: 1px solid var(--border);
 }
 .diff-split-ln-empty  { background: #191817; border-right-color: var(--border); }
-.diff-split-ln-remove { background: rgba(232, 124, 115, 0.2); border-right-color: rgba(232, 124, 115, 0.4); }
-.diff-split-ln-add    { background: rgba(110, 201, 120, 0.2); border-right-color: rgba(110, 201, 120, 0.4); }
+.diff-split-ln-remove { background: rgba(248, 81, 73, 0.3); border-right-color: rgba(248, 81, 73, 0.5); color: #f85149; }
+.diff-split-ln-add    { background: rgba(63, 185, 80, 0.3); border-right-color: rgba(63, 185, 80, 0.5); color: #3fb950; }
+.diff-split-ln-hunk   { background: rgba(56, 139, 253, 0.1); border-right-color: rgba(56, 139, 253, 0.2); }
 
 .diff-file-sep-row td {
   background: rgba(124, 179, 224, 0.07);
@@ -971,14 +972,16 @@ col.diff-split-ln-col { width: 3rem; }
   border-bottom: 1px solid rgba(124, 179, 224, 0.15);
 }
 .diff-hunk-header td {
-  background: rgba(124, 179, 224, 0.05);
-  color: var(--text-muted);
+  background: rgba(56, 139, 253, 0.06);
+  color: rgba(139, 183, 253, 0.75);
   padding: 0.15rem 0.5rem;
   font-style: italic;
-  border-top: 1px solid rgba(124, 179, 224, 0.1);
+  font-size: 0.8rem;
+  border-top: 1px solid rgba(56, 139, 253, 0.15);
+  border-bottom: 1px solid rgba(56, 139, 253, 0.15);
 }
-.diff-split-remove { background: rgba(232, 124, 115, 0.12); color: var(--danger); }
-.diff-split-add    { background: rgba(110, 201, 120, 0.12); color: var(--success); }
+.diff-split-remove { background: rgba(248, 81, 73, 0.2); }
+.diff-split-add    { background: rgba(63, 185, 80, 0.2); }
 .diff-split-empty  { background: #191817; }
 .diff-split-context {}
 

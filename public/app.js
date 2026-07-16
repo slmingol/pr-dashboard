@@ -714,7 +714,7 @@ function renderSideBySideHtml(rows) {
       return `<tr class="diff-file-sep-row"><td colspan="4"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
     }
     if (row.type === 'binary') return `<tr><td colspan="4" class="diff-binary">Binary file — not shown</td></tr>`;
-    if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td colspan="4">${escapeHtml(row.content)}</td></tr>`;
+    if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td class="diff-split-ln diff-split-ln-hunk"></td><td colspan="2">${escapeHtml(row.content)}</td><td class="diff-split-ln diff-split-ln-hunk"></td></tr>`;
     if (row.type === 'context') {
       const c = escapeHtml(row.content);
       return `<tr>${ln(row.leftLn, '')}<td class="diff-split-context">${c}</td>${ln(row.rightLn, '')}<td class="diff-split-context">${c}</td></tr>`;
