@@ -650,12 +650,22 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
     const { stdout, stderr } = await execAsync(cmd);
     console.log(`Review command output: ${stdout}`);
     if (stderr) console.log(`Review command stderr: ${stderr}`);
-    
-    // Invalidate cache for this PR so next fetch gets fresh status
+
+    // Update cache immediately with the known new state — avoids a gh pr view
+    // round-trip on the next fetch for repos that can't reach GitHub directly.
     const cacheKey = `${owner}/${repo}#${number}`;
-    reviewCache.delete(cacheKey);
-    console.log(`Invalidated cache for ${cacheKey}`);
-    
+    const existing = reviewCache.get(cacheKey);
+    const stateMap = { approve: 'APPROVED', 'request-changes': 'CHANGES_REQUESTED', comment: 'COMMENTED' };
+    const newStatus = {
+      hasReviewed: action !== 'comment' ? true : (existing?.status?.hasReviewed || false),
+      state: stateMap[action],
+      submittedAt: new Date().toISOString(),
+      updatedAt: existing?.status?.updatedAt || null,
+      prMeta: existing?.status?.prMeta || null,
+    };
+    reviewCache.set(cacheKey, { status: newStatus, timestamp: Date.now(), prEtag: existing?.prEtag || null, reviewsEtag: null, rawPr: existing?.rawPr || null, rawReviews: null });
+    console.log(`Updated cache for ${cacheKey} with state ${newStatus.state}`);
+
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error(`Review command failed: ${error.message}`);
