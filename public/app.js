@@ -788,9 +788,28 @@ async function viewDiff(owner, repo, number) {
       const splitHtml = renderSideBySideHtml(buildSideBySideDiff(data.diff));
 
       const isWatchOnly = watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
+
+      // Look up review status from the global PR list
+      const prData = allPRs.find(p => p.repo === `${owner}/${repo}` && String(p.number) === String(number));
+      const rs = prData?.reviewStatus || {};
+      const alreadyApproved = rs.hasReviewed && rs.state === 'APPROVED';
+
+      let reviewStatusHtml = '';
+      if (rs.hasReviewed) {
+        if (rs.state === 'APPROVED') {
+          reviewStatusHtml = `<span class="diff-review-badge diff-review-approved" title="You have already approved this PR">&#10003; You Approved</span>`;
+        } else if (rs.state === 'CHANGES_REQUESTED') {
+          reviewStatusHtml = `<span class="diff-review-badge diff-review-changes" title="You have already requested changes on this PR">&#9888; Changes Requested</span>`;
+        } else if (rs.state === 'COMMENTED') {
+          reviewStatusHtml = `<span class="diff-review-badge diff-review-commented" title="You have already commented on this PR">&#128172; Commented</span>`;
+        }
+      } else if (rs.allDismissed) {
+        reviewStatusHtml = `<span class="diff-review-badge diff-review-dismissed" title="Your previous review was dismissed due to new changes">&#8635; Review Dismissed</span>`;
+      }
+
       const actionsHtml = isWatchOnly ? '' : `
-        <button class="btn btn-small btn-approve" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')" title="Approve this PR immediately without a comment">&#10003; Approve</button>
-        <button class="btn btn-small btn-approve-comment" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')" title="Approve this PR and add an optional comment">&#10003; Approve + Comment</button>
+        <button class="btn btn-small btn-approve${alreadyApproved ? ' btn-already-approved' : ''}" onclick="approvePRFromDiff('${owner}', '${repo}', '${number}')"${alreadyApproved ? ' disabled title="Already approved"' : ' title="Approve this PR immediately without a comment"'}>&#10003; Approve</button>
+        <button class="btn btn-small btn-approve-comment${alreadyApproved ? ' btn-already-approved' : ''}" onclick="approvePRFromDiffWithComment('${owner}', '${repo}', '${number}')"${alreadyApproved ? ' disabled title="Already approved"' : ' title="Approve this PR and add an optional comment"'}>&#10003; Approve + Comment</button>
         <button class="btn btn-small btn-request-changes" onclick="requestChangesFromDiff('${owner}', '${repo}', '${number}')" title="Request changes on this PR (comment required)">&#10007; Request Changes</button>`;
 
       showModal(`
@@ -803,6 +822,7 @@ async function viewDiff(owner, repo, number) {
               <span class="diff-stat-add">+${stats.additions}</span>
               <span class="diff-stat-del">-${stats.deletions}</span>
             </div>
+            ${reviewStatusHtml}
             <div class="diff-view-toggle">
               <button id="diff-view-unified" class="btn btn-small btn-primary" onclick="switchDiffView('unified')">Unified</button>
               <button id="diff-view-split" class="btn btn-small btn-muted" onclick="switchDiffView('split')">Split</button>

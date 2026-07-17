@@ -32,13 +32,13 @@ list:
 # ─── Development ─────────────────────────────────────────────────────────────
 
 up:
-	$(COMPOSE) up -d
+	@$(COMPOSE) up -d > /dev/null 2>&1
 
 down:
-	$(COMPOSE) down
+	@$(COMPOSE) down > /dev/null 2>&1
 
 restart:
-	$(COMPOSE) restart
+	@$(COMPOSE) restart > /dev/null 2>&1
 
 logs:
 	$(COMPOSE) logs -f
@@ -49,7 +49,9 @@ shell:
 # ─── Production ──────────────────────────────────────────────────────────────
 
 build:
-	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml up -d --build
+	@printf "Building $(BUILD_VERSION)... "; \
+	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml up -d --build > /dev/null 2>&1 \
+	&& printf "done.\n" || (printf "FAILED\n"; exit 1)
 
 prod: build
 
