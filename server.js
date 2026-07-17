@@ -46,6 +46,7 @@ function githubGet(apiPath, extraHeaders = {}) {
         res.on('end', () => resolve({
           status: res.statusCode,
           etag: res.headers['etag'] || null,
+          link: res.headers['link'] || null,
           rateRemaining: parseInt(res.headers['x-ratelimit-remaining'] ?? '-1'),
           body,
         }));
@@ -56,6 +57,13 @@ function githubGet(apiPath, extraHeaders = {}) {
     req.end();
   });
 }
+// Extract the path portion of a GitHub "next" Link header, or null if absent.
+function parseNextLink(linkHeader) {
+  if (!linkHeader) return null;
+  const m = linkHeader.match(/<https:\/\/api\.github\.com([^>]+)>;\s*rel="next"/);
+  return m ? m[1] : null;
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Map a REST API PR object to our internal shape
@@ -280,15 +288,37 @@ async function fetchReviewStatusRest(prs, username) {
     const cached = reviewCache.get(key); // may be stale — that's why it's a miss
 
     try {
-      const prHeaders  = cached?.prEtag      ? { 'If-None-Match': cached.prEtag }      : {};
-      const rvHeaders  = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
+      const prHeaders = cached?.prEtag ? { 'If-None-Match': cached.prEtag } : {};
+      // reviewsEtag is only set for single-page responses; null means multi-page (always re-fetch)
+      const rvHeaders = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
 
-      const [prRes, rvRes] = await Promise.all([
+      const [prRes, rvRes1] = await Promise.all([
         githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}`, prHeaders),
-        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=50`, rvHeaders),
+        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=100`, rvHeaders),
       ]);
 
-      if (prRes.status === 304 && rvRes.status === 304) {
+      // Paginate reviews if there are more pages
+      let rawReviews, newReviewsEtag;
+      if (rvRes1.status === 304) {
+        rawReviews = cached?.rawReviews || [];
+        newReviewsEtag = cached?.reviewsEtag;
+      } else if (rvRes1.status === 200) {
+        rawReviews = JSON.parse(rvRes1.body).map(r => ({ user: r.user, state: r.state, submitted_at: r.submitted_at }));
+        let nextPath = parseNextLink(rvRes1.link);
+        while (nextPath) {
+          const nextRes = await githubGet(nextPath);
+          if (nextRes.status !== 200) break;
+          rawReviews = rawReviews.concat(JSON.parse(nextRes.body).map(r => ({ user: r.user, state: r.state, submitted_at: r.submitted_at })));
+          nextPath = parseNextLink(nextRes.link);
+        }
+        // Only store an ETag when there's a single page — multi-page ETags only cover page 1
+        newReviewsEtag = parseNextLink(rvRes1.link) ? null : rvRes1.etag;
+      } else {
+        rawReviews = cached?.rawReviews || [];
+        newReviewsEtag = cached?.reviewsEtag;
+      }
+
+      if (prRes.status === 304 && rvRes1.status === 304) {
         // Nothing changed — refresh TTL so cache stays warm
         if (cached) reviewCache.set(key, { ...cached, timestamp: Date.now() });
         notModified++;
@@ -298,9 +328,6 @@ async function fetchReviewStatusRest(prs, username) {
       const rawPr = prRes.status === 200
         ? (() => { const d = JSON.parse(prRes.body); return { title: d.title, user: d.user, state: d.state, draft: d.draft, merged: d.merged, updated_at: d.updated_at, created_at: d.created_at, review_decision: d.review_decision }; })()
         : cached?.rawPr;
-      const rawReviews = rvRes.status === 200
-        ? JSON.parse(rvRes.body).map(r => ({ user: r.user, state: r.state, submitted_at: r.submitted_at }))
-        : (cached?.rawReviews || []);
 
       if (!rawPr) { errors++; restErrors.add(key); return; }
 
@@ -332,7 +359,7 @@ async function fetchReviewStatusRest(prs, username) {
         status,
         timestamp: Date.now(),
         prEtag:      prRes.etag ?? cached?.prEtag,
-        reviewsEtag: rvRes.etag ?? cached?.reviewsEtag,
+        reviewsEtag: newReviewsEtag,
         rawPr,
         rawReviews,
       });
@@ -518,9 +545,12 @@ app.get('/api/prs', async (req, res) => {
         ghFetchMs = Date.now() - ghFetchStart;
       }
 
-      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases)
+      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
+      // Skip REST-failed keys — they need the gh pr view fallback for fresh data,
+      // not a potentially stale cache entry that would hide the true review state.
       for (const pr of misses) {
         const key = `${pr.repo}#${pr.number}`;
+        if (restErrors.has(key)) continue;
         const cached = reviewCache.get(key);
         if (cached?.status) hits[key] = { ...cached.status, cachedAt: cached.timestamp };
       }
