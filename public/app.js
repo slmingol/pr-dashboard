@@ -313,20 +313,6 @@ async function fetchPRs(force = false) {
       // Update previousPRIds for next comparison
       previousPRIds = currentPRIds;
       
-      // Clean up hiddenPRs - remove any PRs that no longer exist
-      const cleanedHiddenPRs = {};
-      for (const prId of Object.keys(hiddenPRs)) {
-        if (currentPRIds.has(prId)) {
-          cleanedHiddenPRs[prId] = hiddenPRs[prId];
-        }
-      }
-      
-      // Update hiddenPRs if we removed stale entries
-      if (Object.keys(cleanedHiddenPRs).length !== Object.keys(hiddenPRs).length) {
-        hiddenPRs = cleanedHiddenPRs;
-        localStorage.setItem('hiddenPRs', JSON.stringify(hiddenPRs));
-      }
-      
       updateStats();
       filterAndRenderPRs();
       if (data.prs.length > 0) {
