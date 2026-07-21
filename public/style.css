@@ -877,7 +877,8 @@ kbd {
 .diff-header-left  { display: flex; align-items: center; gap: 0.5rem; min-width: 0; overflow: hidden; }
 .diff-header-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
 .diff-header-repo  { font-weight: 600; font-size: 0.9rem; color: var(--text); }
-.diff-header-num   { color: var(--text-muted); font-size: 0.9rem; }
+.diff-header-num    { color: var(--text-muted); font-size: 0.9rem; }
+.diff-header-author { color: var(--text-muted); font-size: 0.82rem; }
 .diff-header-stats { display: flex; gap: 0.45rem; align-items: center; margin-left: 0.35rem; padding-left: 0.6rem; border-left: 1px solid var(--border); }
 .diff-stat-files   { font-size: 0.78rem; color: var(--text-muted); }
 .diff-stat-add     { font-size: 0.78rem; color: var(--success); font-weight: 700; }

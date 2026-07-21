@@ -817,6 +817,7 @@ async function viewDiff(owner, repo, number) {
           <div class="diff-header-left">
             <span class="diff-header-repo">${escapeHtml(owner)}/${escapeHtml(repo)}</span>
             <span class="diff-header-num">#${number}</span>
+            ${prData?.author?.login ? `<span class="diff-header-author" title="PR author">by ${escapeHtml(prData.author.login)}</span>` : ''}
             <div class="diff-header-stats">
               <span class="diff-stat-files">${stats.files} file${stats.files !== 1 ? 's' : ''}</span>
               <span class="diff-stat-add">+${stats.additions}</span>
