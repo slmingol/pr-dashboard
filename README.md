@@ -36,6 +36,10 @@ Keyword search, state filter, Show Hidden / Show Drafts toggles, and a Reset but
 
 Sortable table of all watched repos with open PR counts and watch-only status. Click any column header to sort.
 
+- **Add repo** -- type `owner/name` in the input at the top-right and press Enter or click **+ Add**. Writes directly to `~/.config/ghreport/config.yaml`; takes effect on the next refresh.
+- **Remove repo** -- click the **✕** button on any row to unsubscribe.
+- **Watch-only toggle** -- click the Watch-only cell on any row to set or clear watch-only without needing an open PR from that repo.
+
 ![Repos modal with search](docs/screenshots/repos-modal-search.png)
 
 Type in the filter box to narrow by org or repo name. Count updates to show matched / total.
@@ -57,7 +61,8 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 - **Consolidated PR view** -- all open PRs across monitored repos, grouped by repository with sticky headers
 - **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
 - **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage
-- **Watch-only repos** -- mark repos as view-only to suppress review actions
+- **Watch-only repos** -- mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal
+- **Repo management** -- add or remove watched repos directly from the UI without editing config files
 - **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, or draft status
 - **Statistics bar** -- real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
 
@@ -154,11 +159,11 @@ echo "GH_TOKEN=$(gh auth token)" > .env
 
 ### 2. Configure watched repos
 
-The dashboard reads `~/.config/ghreport/config.yaml` for the `subscribedRepos` list. Mount it into the container (already configured in `docker-compose.yml`):
+The dashboard reads `~/.config/ghreport/config.yaml` for the `subscribedRepos` list. The config directory is mounted read-write so the UI can add and remove repos without restarting the container:
 
 ```yaml
 volumes:
-  - ~/.config/ghreport:/root/.config/ghreport:ro
+  - ~/.config/ghreport:/root/.config/ghreport:rw
 ```
 
 The relevant section of the config file:
@@ -170,7 +175,9 @@ subscribedRepos:
   - org/repo3
 ```
 
-You can also pass the list directly via `.env`:
+Repos can also be managed directly from the dashboard: click the **Repos** stat tile to open the watched repos modal, then use the **+ Add** input or the **✕** remove buttons. Changes write back to `config.yaml` immediately.
+
+You can also pass the list directly via `.env` (takes effect if config.yaml has no `subscribedRepos` section):
 
 ```bash
 echo 'subscribedRepos=org/repo1 org/repo2 org/repo3' >> .env
@@ -226,7 +233,7 @@ make clean     # remove container and image
 ```yaml
 volumes:
   - ~/.config/gh:/root/.config/gh:ro              # gh CLI auth (for review/diff/checkout)
-  - ~/.config/ghreport:/root/.config/ghreport:ro  # repo list config
+  - ~/.config/ghreport:/root/.config/ghreport:rw  # repo list config (rw so UI can add/remove repos)
   - ~/ghreport-output:/data                       # optional: output file directory
   - ~/.gitconfig:/root/.gitconfig:ro              # git config for checkout
 ```
@@ -297,6 +304,8 @@ browser GET /api/prs
 | GET | `/api/prs` | All PRs with review status and perf metadata |
 | GET | `/api/user` | Current authenticated GitHub user |
 | GET | `/api/repos` | Subscribed repo list |
+| POST | `/api/repos` | Add a repo (`{ repo: "owner/name" }`) to config.yaml |
+| DELETE | `/api/repos/:owner/:name` | Remove a repo from config.yaml |
 | GET | `/api/rate-limit` | Current GitHub API rate limit status (GraphQL + REST) |
 | GET | `/api/pr/:owner/:repo/:number` | PR details |
 | GET | `/api/pr/:owner/:repo/:number/diff` | PR diff |
@@ -366,9 +375,9 @@ The repo list will be read from `~/.config/ghreport/config.yaml` if it exists, o
 - 404/403 errors for private or deleted repos are silently ignored
 
 **Missing repos in the dashboard**
+- Click the **Repos** stat tile to open the watched repos modal; use **+ Add** to subscribe without editing files
 - Ensure `~/.config/ghreport/config.yaml` is mounted and contains the repo under `subscribedRepos`
-- Restart container after config changes: `make restart`
-- Click the **Repos** stat tile to see which repos the dashboard is watching
+- Config changes via the UI take effect on the next refresh — no restart needed
 
 **Container won't start**
 - `podman ps -a` and `podman logs pr-dashboard --tail 50`
