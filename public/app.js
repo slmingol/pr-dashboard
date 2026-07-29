@@ -1514,8 +1514,44 @@ async function loadRepos() {
   } catch (_) {}
 }
 
+async function addRepo(repo) {
+  repo = repo.trim();
+  if (!repo || !/^[^/]+\/[^/]+$/.test(repo)) {
+    showToast('Enter a repo as owner/name', 'error'); return;
+  }
+  try {
+    const res = await fetch('/api/repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      subscribedRepos = data.repos;
+      showToast(data.alreadyExists ? `${repo} already watched` : `Added ${repo}`, data.alreadyExists ? 'info' : 'success', '', 2500);
+      showReposModal();
+    } else {
+      showToast('Failed to add repo: ' + data.error, 'error');
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function removeRepo(repo) {
+  const [owner, name] = repo.split('/');
+  try {
+    const res = await fetch(`/api/repos/${owner}/${name}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      subscribedRepos = data.repos;
+      showToast(`Removed ${repo}`, 'info', '', 2500);
+      showReposModal();
+    } else {
+      showToast('Failed to remove repo: ' + data.error, 'error');
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
 function showReposModal() {
-  if (!subscribedRepos.length) return;
 
   const prCounts = {};
   for (const pr of allPRs) prCounts[pr.repo] = (prCounts[pr.repo] || 0) + 1;
@@ -1539,6 +1575,7 @@ function showReposModal() {
           <th data-col="name" style="${thStyle}">Repo</th>
           <th data-col="prs" style="${thStyleC}">Open PRs</th>
           <th data-col="watchOnly" style="${thStyleC}">Watch-only</th>
+          <th style="${thStyleC}"></th>
         </tr>
       </thead>
       <tbody id="repos-tbody"></tbody>
@@ -1548,6 +1585,10 @@ function showReposModal() {
       <span id="repo-modal-count" class="modal-header-sub"></span>
       <input id="repo-search" type="text" placeholder="Filter repos…" autocomplete="off"
         style="padding:0.35rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-deeper);color:var(--text);font-size:0.875rem;width:180px">
+      <input id="repo-add-input" type="text" placeholder="owner/name" autocomplete="off"
+        style="padding:0.35rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-deeper);color:var(--text);font-size:0.875rem;width:160px"
+        onkeydown="if(event.key==='Enter'){addRepo(this.value);this.value=''}">
+      <button class="btn btn-small btn-success" onclick="const i=document.getElementById('repo-add-input');addRepo(i.value);i.value=''">+ Add</button>
     `,
   });
 
@@ -1561,7 +1602,8 @@ function showReposModal() {
         <td style="${tdStyle};color:var(--text-muted)">${r.org}</td>
         <td style="${tdStyle}"><a href="https://github.com/${r.full}" target="_blank" style="color:var(--primary);text-decoration:none">${r.name}</a></td>
         <td style="${tdStyleC}">${r.prs > 0 ? `<span class="state-badge state-info">${r.prs}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td style="${tdStyleC}">${r.watchOnly ? '<span class="state-badge state-watch">WATCH</span>' : ''}</td>
+        <td style="${tdStyleC}"><button class="btn btn-small ${r.watchOnly ? 'btn-primary' : 'btn-muted'}" onclick="toggleWatchOnlyRepo('${r.full}');showReposModal()" title="${r.watchOnly ? 'Remove watch-only' : 'Set watch-only'}" style="padding:1px 8px;font-size:0.75rem">${r.watchOnly ? 'WATCH' : '—'}</button></td>
+        <td style="${tdStyleC}"><button class="btn btn-small btn-danger" onclick="removeRepo('${r.full}')" title="Remove from watch list" style="opacity:0.6;padding:1px 7px;font-size:0.75rem">✕</button></td>
       </tr>
     `).join('');
   }

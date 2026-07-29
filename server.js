@@ -479,6 +479,53 @@ app.get('/api/repos', async (req, res) => {
   }
 });
 
+// Add a repo to the ghreport config.yaml subscribedRepos list
+app.post('/api/repos', async (req, res) => {
+  const { repo } = req.body || {};
+  if (!repo || !/^[^/]+\/[^/]+$/.test(repo)) {
+    return res.status(400).json({ success: false, error: 'Invalid repo format (expected owner/name)' });
+  }
+  const configPath = process.env.GHREPORT_CONFIG || '/root/.config/ghreport/config.yaml';
+  try {
+    const { repos } = await getSubscribedRepos();
+    if (repos.includes(repo)) return res.json({ success: true, repos: repos.sort(), alreadyExists: true });
+    let content = '';
+    try { content = await fs.readFile(configPath, 'utf-8'); } catch (_) {}
+    if (/^subscribedRepos:/m.test(content)) {
+      // Find the end of the subscribedRepos block and insert there
+      content = content.replace(/(subscribedRepos:[\s\S]*?)(\n(?=\S)|\n*$)/, (_, block, tail) => {
+        return block.trimEnd() + `\n  - ${repo}` + tail;
+      });
+    } else {
+      content = content.trimEnd() + `\nsubscribedRepos:\n  - ${repo}\n`;
+    }
+    await fs.writeFile(configPath, content, 'utf-8');
+    const updated = (await getSubscribedRepos()).repos;
+    res.json({ success: true, repos: updated.sort() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Remove a repo from the ghreport config.yaml subscribedRepos list
+app.delete('/api/repos/:owner/:name', async (req, res) => {
+  const repo = `${req.params.owner}/${req.params.name}`;
+  const configPath = process.env.GHREPORT_CONFIG || '/root/.config/ghreport/config.yaml';
+  try {
+    let content = '';
+    try { content = await fs.readFile(configPath, 'utf-8'); } catch (_) {}
+    const escaped = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const before = content;
+    content = content.replace(new RegExp(`^[ \\t]*-[ \\t]+${escaped}[ \\t]*\\n?`, 'm'), '');
+    if (content === before) return res.json({ success: true, repos: (await getSubscribedRepos()).repos.sort(), notFound: true });
+    await fs.writeFile(configPath, content, 'utf-8');
+    const updated = (await getSubscribedRepos()).repos;
+    res.json({ success: true, repos: updated.sort() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/user', async (req, res) => {
   try {
     const username = await getCurrentUser();

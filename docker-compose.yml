@@ -11,8 +11,8 @@ services:
       # Mount gh CLI config for authentication
       - ~/.config/gh:/root/.config/gh:ro
       
-      # Mount ghreport config for repository subscriptions
-      - ~/.config/ghreport:/root/.config/ghreport:ro
+      # Mount ghreport config for repository subscriptions (rw so the UI can add/remove repos)
+      - ~/.config/ghreport:/root/.config/ghreport:rw
       
       # Mount ghreport output directory (create if doesn't exist)
       - ~/ghreport-output:/data
