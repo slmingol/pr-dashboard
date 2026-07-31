@@ -83,6 +83,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 ### Data refresh
 
 - **Refresh Data** -- queries all monitored repositories via 10 concurrent REST requests with ETag caching; typically ~7s for 100+ repos; streams real per-repo progress via SSE
+- **Auto-refresh** -- silently runs a full refresh every 30 minutes while the tab is open; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires
 - **Reload** -- returns the cached PR list instantly (in-memory cache, 5-minute TTL) without hitting GitHub
 - **Performance bar** -- displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
 
@@ -100,6 +101,7 @@ refresh: 15.4s · GH: 11.3s · avg: 4.3s · 0/135 cached · 122/126 repos cached
 | `N/M cached` | Review status cache: N PRs had a valid cached status (no GitHub call); M is total PRs. 304 Not Modified responses keep the cached value at zero quota cost. |
 | `N/M repos cached` | PR list ETag cache: N repos returned 304 Not Modified (unchanged since last refresh, zero quota cost); M is total watched repos |
 | `REST: N/5,000` | GitHub REST API rate limit remaining in the current hourly window. The `/rate_limit` endpoint and ETag 304 responses are exempt and do not count against this total. |
+| `auto: Xm ago` | Time since the last automatic background refresh. Only shown after the first auto-refresh fires (every 30 minutes while the tab is open). |
 
 ### Metrics page (`/metrics`)
 
