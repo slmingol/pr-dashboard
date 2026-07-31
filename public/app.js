@@ -7,6 +7,9 @@ let selectedPRId = null;
 let subscribedRepos = [];
 let lastRefreshWallMs = null;
 let lastPerfData = null;
+let autoRefreshTimer = null;
+let lastAutoRefreshAt = null;
+const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -225,6 +228,11 @@ function renderPerfBar() {
   if (p.rateInfo?.rest) {
     const rl = p.rateInfo.rest;
     parts.push(`REST: ${rl.remaining?.toLocaleString()}/${rl.limit?.toLocaleString()}`);
+  }
+  if (lastAutoRefreshAt != null) {
+    const agoMs = Date.now() - lastAutoRefreshAt;
+    const agoMin = Math.round(agoMs / 60000);
+    parts.push(`auto: ${agoMin === 0 ? 'just now' : `${agoMin}m ago`}`);
   }
   document.getElementById('perf-bar').textContent = parts.join('  ·  ');
 }
@@ -1196,8 +1204,8 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Refresh ghreport data
-async function refreshGhReport() {
+// Core SSE refresh stream runner. silent=true skips button/progress UI.
+async function runRefreshStream({ silent = false } = {}) {
   const btn = document.getElementById('refresh-ghreport-btn');
   const progressContainer = document.getElementById('refresh-progress');
   const progressFill = document.querySelector('.progress-fill');
@@ -1205,48 +1213,54 @@ async function refreshGhReport() {
   const originalText = btn.textContent;
   const wallStart = performance.now();
 
-  try {
+  if (!silent) {
     btn.disabled = true;
     btn.textContent = '⏳ Running...';
     progressContainer.classList.remove('hidden');
     progressFill.style.width = '0%';
     progressText.textContent = 'Starting...';
-    
-    // Use EventSource for Server-Sent Events
+  }
+
+  return new Promise((resolve) => {
     const eventSource = new EventSource('/api/refresh-ghreport-stream');
     let refreshCompleted = false;
+
+    const cleanup = (ok) => {
+      eventSource.close();
+      if (!silent) {
+        progressContainer.classList.add('hidden');
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+      resolve(ok);
+    };
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
       if (data.error) {
         showToast(`Failed to refresh: ${data.message}`, 'error', 'Refresh Failed');
-        eventSource.close();
-        progressContainer.classList.add('hidden');
-        btn.disabled = false;
-        btn.textContent = originalText;
+        cleanup(false);
         return;
       }
 
-      if (data.progress !== undefined) {
+      if (!silent && data.progress !== undefined) {
         progressFill.style.width = `${data.progress}%`;
-        if (data.message) {
-          progressText.textContent = data.message;
-        }
+        if (data.message) progressText.textContent = data.message;
       }
 
       if (data.complete) {
         refreshCompleted = true;
-        eventSource.close();
-        showToast(`✓ Refreshed PR data. Found ${data.prCount} PRs.`, 'success', 'Data Refreshed');
-        // Automatically reload the PR list after successful refresh
+        const msg = silent
+          ? `Auto-refreshed: ${data.prCount} PRs`
+          : `✓ Refreshed PR data. Found ${data.prCount} PRs.`;
+        showToast(msg, 'success', 'Data Refreshed');
         setTimeout(async () => {
           await fetchPRs(true);
           lastRefreshWallMs = Math.round(performance.now() - wallStart);
-          renderPerfBar(); // re-render with the now-correct wall time
-          progressContainer.classList.add('hidden');
-          btn.disabled = false;
-          btn.textContent = originalText;
+          if (silent) lastAutoRefreshAt = Date.now();
+          renderPerfBar();
+          cleanup(true);
         }, 0);
       }
     };
@@ -1254,19 +1268,29 @@ async function refreshGhReport() {
     eventSource.onerror = (error) => {
       if (refreshCompleted) return;
       console.error('EventSource error:', error);
-      eventSource.close();
-      showToast('Connection error during refresh', 'error', 'Network Error');
-      progressContainer.classList.add('hidden');
-      btn.disabled = false;
-      btn.textContent = originalText;
+      if (!silent) showToast('Connection error during refresh', 'error', 'Network Error');
+      cleanup(false);
     };
-    
-  } catch (error) {
-    showToast(`Error refreshing data: ${error.message}`, 'error', 'Network Error');
-    progressContainer.classList.add('hidden');
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
+  });
+}
+
+// Refresh ghreport data (manual button)
+async function refreshGhReport() {
+  resetAutoRefresh(); // restart the 30-min countdown
+  await runRefreshStream({ silent: false });
+}
+
+// ─── Auto-refresh ─────────────────────────────────────────────────────────────
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(async () => {
+    await runRefreshStream({ silent: true });
+  }, AUTO_REFRESH_INTERVAL_MS);
+}
+
+function resetAutoRefresh() {
+  startAutoRefresh();
 }
 
 // ─── Keyboard navigation ──────────────────────────────────────────────────────
@@ -1772,3 +1796,4 @@ loadFilterPrefs();
 fetchPRs();
 loadVersion();
 loadRepos();
+startAutoRefresh();
