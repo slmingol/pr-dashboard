@@ -93,9 +93,11 @@ const FAKE_PERF = {
   rateInfo: { listHits: 122, listMisses: 4, rest: { remaining: 4979, limit: 5000 } },
 };
 
+const FAKE_TEAM = ['jsmith', 'mchen', 'dlee'];
+
 async function injectFakeData(page) {
   // evaluateOnNewDocument runs before any page scripts, surviving page.goto()
-  await page.evaluateOnNewDocument((prs, repos, perf) => {
+  await page.evaluateOnNewDocument((prs, repos, perf, team) => {
     const origFetch = window.fetch.bind(window);
     window.fetch = async (url, opts) => {
       if (url === '/api/prs' || url.startsWith('/api/prs?')) {
@@ -111,9 +113,14 @@ async function injectFakeData(page) {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      if (url === '/api/team-members') {
+        return new Response(JSON.stringify({ success: true, members: team }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return origFetch(url, opts);
     };
-  }, FAKE_PRS, FAKE_REPOS, FAKE_PERF);
+  }, FAKE_PRS, FAKE_REPOS, FAKE_PERF, FAKE_TEAM);
 }
 
 async function wait(ms) {
