@@ -1541,6 +1541,7 @@ async function loadTeamMembers() {
     const data = await res.json();
     if (data.success && Array.isArray(data.members)) {
       teamMembers = new Set(data.members.map(m => m.toLowerCase()));
+      if (allPRs.length > 0) filterAndRenderPRs();
     }
   } catch (_) {}
 }
