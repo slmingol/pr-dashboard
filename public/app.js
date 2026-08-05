@@ -10,6 +10,7 @@ let lastPerfData = null;
 let autoRefreshTimer = null;
 let lastAutoRefreshAt = null;
 const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+let teamMembers = new Set();
 
 function parseAgeDays(ageStr) {
   if (!ageStr) return 0;
@@ -457,14 +458,21 @@ function renderPRs(prs, showHidden = false) {
       const isStale = !isHidden && ageDays >= 365;
       const updatedLabel = age ? age : formatUpdatedDate(pr.updatedAt);
 
+      const isTeamMember = pr.author?.login && teamMembers.has(pr.author.login.toLowerCase());
+      const authorHtml = pr.author?.login
+        ? isTeamMember
+          ? `<span class="author-team-badge" title="Bandwidth PaaS team member">&#9733; ${pr.author.login}</span>`
+          : `👤 ${pr.author.login}`
+        : '';
+
       html += `
-        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''} ${isStale ? 'pr-stale' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
+        <div class="pr-card ${isHidden && showHidden ? 'pr-hidden-dimmed' : ''} ${pr.isNew ? 'pr-new' : ''} ${isStale ? 'pr-stale' : ''} ${isTeamMember ? 'pr-team' : ''}" data-owner="${owner}" data-repo="${repoName}" data-number="${number}">
           <div class="pr-main">
             <div class="pr-info">
               <a href="${pr.url}" target="_blank" class="pr-number" title="Open PR in GitHub">#${number}</a>
               ${hasRealTitle ? `<span class="pr-title">${pr.title}</span>` : ''}
               <span class="pr-meta-inline">
-                ${pr.author?.login ? `👤 ${pr.author.login}` : ''}
+                ${authorHtml}
                 ${updatedLabel ? `• 📅 ${updatedLabel}` : ''}
                 ${reviewDecision ? `• ${reviewDecision}` : ''}
                 ${mergeable ? `• ${mergeable}` : pr.metadata ? '• ❓' : ''}
@@ -1527,6 +1535,16 @@ async function loadVersion() {
   } catch (_) {}
 }
 
+async function loadTeamMembers() {
+  try {
+    const res = await fetch('/api/team-members');
+    const data = await res.json();
+    if (data.success && Array.isArray(data.members)) {
+      teamMembers = new Set(data.members.map(m => m.toLowerCase()));
+    }
+  } catch (_) {}
+}
+
 async function loadRepos() {
   try {
     const res = await fetch('/api/repos');
@@ -1796,4 +1814,5 @@ loadFilterPrefs();
 fetchPRs();
 loadVersion();
 loadRepos();
+loadTeamMembers();
 startAutoRefresh();

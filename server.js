@@ -526,6 +526,28 @@ app.delete('/api/repos/:owner/:name', async (req, res) => {
   }
 });
 
+let _cachedTeamMembers = null;
+let _cachedTeamMembersAt = 0;
+const TEAM_ORG = 'Bandwidth';
+const TEAM_SLUG = 'band-platform-paas';
+
+app.get('/api/team-members', async (req, res) => {
+  try {
+    if (_cachedTeamMembers && (Date.now() - _cachedTeamMembersAt) < 10 * 60 * 1000) {
+      return res.json({ success: true, members: _cachedTeamMembers });
+    }
+    const { stdout } = await execAsync(
+      `gh api /orgs/${TEAM_ORG}/teams/${TEAM_SLUG}/members --jq '[.[].login]'`
+    );
+    _cachedTeamMembers = JSON.parse(stdout.trim());
+    _cachedTeamMembersAt = Date.now();
+    res.json({ success: true, members: _cachedTeamMembers });
+  } catch (error) {
+    console.error('Error fetching team members:', error.message);
+    res.status(500).json({ success: false, error: error.message, members: [] });
+  }
+});
+
 app.get('/api/user', async (req, res) => {
   try {
     const username = await getCurrentUser();
