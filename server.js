@@ -177,15 +177,24 @@ app.use(express.static('public'));
 // Get current authenticated user (cached — identity doesn't change mid-session)
 let _cachedUser = null;
 let _cachedUserAt = 0;
+let _cachedUserFailed = false;
 async function getCurrentUser() {
-  if (_cachedUser && (Date.now() - _cachedUserAt) < 10 * 60 * 1000) return _cachedUser;
+  const age = Date.now() - _cachedUserAt;
+  // Success cached for 10 min; failure cached for 2 min to avoid hammering gh
+  if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 2 * 60 * 1000 : 10 * 60 * 1000)) {
+    return _cachedUser;
+  }
   try {
     const { stdout } = await execAsync('gh api user --jq .login');
     _cachedUser = stdout.trim();
+    _cachedUserFailed = false;
     _cachedUserAt = Date.now();
     return _cachedUser;
   } catch (error) {
     console.error('Error getting current user:', error.message);
+    _cachedUser = null;
+    _cachedUserFailed = true;
+    _cachedUserAt = Date.now();
     return null;
   }
 }
