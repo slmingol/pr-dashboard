@@ -183,6 +183,7 @@ async function getCurrentUser() {
   if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 35 * 60 * 1000 : 10 * 60 * 1000)) {
     return _cachedUser;
   }
+  // Try REST API first
   try {
     const res = await githubGet('/user');
     if (res.status === 200) {
@@ -191,14 +192,23 @@ async function getCurrentUser() {
       _cachedUserAt = Date.now();
       return _cachedUser;
     }
-    throw new Error(`HTTP ${res.status}`);
-  } catch (error) {
-    console.error('Error getting current user:', error.message);
-    _cachedUser = null;
-    _cachedUserFailed = true;
-    _cachedUserAt = Date.now();
-    return null;
-  }
+  } catch (_) {}
+  // Fall back to local gh config — no API call, works even when rate limited
+  try {
+    const { stdout } = await execAsync('gh config get -h github.com user');
+    const login = stdout.trim();
+    if (login) {
+      _cachedUser = login;
+      _cachedUserFailed = false;
+      _cachedUserAt = Date.now();
+      return _cachedUser;
+    }
+  } catch (_) {}
+  console.error('Error getting current user: all methods failed');
+  _cachedUser = null;
+  _cachedUserFailed = true;
+  _cachedUserAt = Date.now();
+  return null;
 }
 
 // Read subscribedRepos list from ghreport config.yaml or env var.
