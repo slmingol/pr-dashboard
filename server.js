@@ -579,8 +579,13 @@ app.get('/api/prs', async (req, res) => {
       if (repos.length > 0) {
         const result = await fetchAllOpenPRsFromGitHub(repos, null);
         prs = result.prs;
-        prListCache.prs = prs;
-        prListCache.fetchedAt = Date.now();
+        if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
+          console.warn(`fetchAllOpenPRs returned 0; keeping cached ${prListCache.prs.length} PRs`);
+          prs = prListCache.prs;
+        } else {
+          prListCache.prs = prs;
+          prListCache.fetchedAt = Date.now();
+        }
         if (prListCache.rateInfo) {
           prListCache.rateInfo.listHits = result.listHits;
           prListCache.rateInfo.listMisses = result.listMisses;
@@ -844,6 +849,15 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
       const rl = await githubGet('/rate_limit');
       if (rl.status === 200) restRL = JSON.parse(rl.body)?.resources?.core ?? null;
     } catch (_) {}
+
+    // Guard: don't overwrite a healthy cache with an empty result — GitHub network blip
+    if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
+      console.warn(`Refresh returned 0 PRs but cache has ${prListCache.prs.length}; keeping old cache`);
+      sendProgress(100, `Refresh returned 0 PRs — keeping previous ${prListCache.prs.length} PRs`);
+      res.write(`data: ${JSON.stringify({ complete: true, prCount: prListCache.prs.length, warn: 'zero_prs_rejected' })}\n\n`);
+      res.end();
+      return;
+    }
 
     // Update in-memory cache
     prListCache.prs = prs;
