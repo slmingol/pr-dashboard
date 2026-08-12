@@ -180,16 +180,18 @@ let _cachedUserAt = 0;
 let _cachedUserFailed = false;
 async function getCurrentUser() {
   const age = Date.now() - _cachedUserAt;
-  // Success cached for 10 min; failure cached for 2 min to avoid hammering gh
   if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 2 * 60 * 1000 : 10 * 60 * 1000)) {
     return _cachedUser;
   }
   try {
-    const { stdout } = await execAsync('gh api user --jq .login');
-    _cachedUser = stdout.trim();
-    _cachedUserFailed = false;
-    _cachedUserAt = Date.now();
-    return _cachedUser;
+    const res = await githubGet('/user');
+    if (res.status === 200) {
+      _cachedUser = JSON.parse(res.body).login;
+      _cachedUserFailed = false;
+      _cachedUserAt = Date.now();
+      return _cachedUser;
+    }
+    throw new Error(`HTTP ${res.status}`);
   } catch (error) {
     console.error('Error getting current user:', error.message);
     _cachedUser = null;
