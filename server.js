@@ -106,7 +106,13 @@ async function fetchRepoPRsRest(repo) {
     return { prs: cached.prs, fromCache: true };
   }
 
-  if (result.status !== 200) return { prs: [], fromCache: false };
+  if (result.status !== 200) {
+    if (result.status === 403 || result.status === 429 || result.status >= 500) {
+      console.warn(`fetchRepoPRsRest ${repo}: HTTP ${result.status}${cached ? ' — using stale cache' : ' — no cache'}`);
+      if (cached) return { prs: cached.prs, fromCache: true };
+    }
+    return { prs: [], fromCache: false };
+  }
 
   const page1 = JSON.parse(result.body);
   let prs = page1.map(pr => mapRestPR(repo, pr));
