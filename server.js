@@ -180,7 +180,7 @@ let _cachedUserAt = 0;
 let _cachedUserFailed = false;
 async function getCurrentUser() {
   const age = Date.now() - _cachedUserAt;
-  if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 2 * 60 * 1000 : 10 * 60 * 1000)) {
+  if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 35 * 60 * 1000 : 10 * 60 * 1000)) {
     return _cachedUser;
   }
   try {
