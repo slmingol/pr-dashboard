@@ -547,14 +547,17 @@ app.get('/api/team-members', async (req, res) => {
     if (_cachedTeamMembers && (Date.now() - _cachedTeamMembersAt) < 10 * 60 * 1000) {
       return res.json({ success: true, members: _cachedTeamMembers });
     }
-    const { stdout } = await execAsync(
-      `gh api /orgs/${TEAM_ORG}/teams/${TEAM_SLUG}/members --jq '[.[].login]'`
-    );
-    _cachedTeamMembers = JSON.parse(stdout.trim());
-    _cachedTeamMembersAt = Date.now();
-    res.json({ success: true, members: _cachedTeamMembers });
+    const r = await githubGet(`/orgs/${TEAM_ORG}/teams/${TEAM_SLUG}/members`);
+    if (r.status === 200) {
+      _cachedTeamMembers = JSON.parse(r.body).map(m => m.login);
+      _cachedTeamMembersAt = Date.now();
+      return res.json({ success: true, members: _cachedTeamMembers });
+    }
+    throw new Error(`HTTP ${r.status}`);
   } catch (error) {
     console.error('Error fetching team members:', error.message);
+    // Return stale cache on error rather than empty list
+    if (_cachedTeamMembers) return res.json({ success: true, members: _cachedTeamMembers });
     res.status(500).json({ success: false, error: error.message, members: [] });
   }
 });
