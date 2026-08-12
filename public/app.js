@@ -1294,8 +1294,19 @@ async function refreshGhReport() {
 
 // ─── Auto-refresh ─────────────────────────────────────────────────────────────
 
+let autoRefreshEnabled = localStorage.getItem('autoRefreshEnabled') !== 'false';
+
+function updateAutoRefreshBtn() {
+  const btn = document.getElementById('auto-refresh-toggle');
+  if (!btn) return;
+  btn.textContent = `⏱ Auto: ${autoRefreshEnabled ? 'ON' : 'OFF'}`;
+  btn.className = `btn ${autoRefreshEnabled ? 'btn-muted' : 'btn-warning'}`;
+  btn.title = autoRefreshEnabled ? 'Auto-refresh ON — click to disable' : 'Auto-refresh OFF — click to enable';
+}
+
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  if (!autoRefreshEnabled) return;
   autoRefreshTimer = setInterval(async () => {
     await runRefreshStream({ silent: true });
   }, AUTO_REFRESH_INTERVAL_MS);
@@ -1303,6 +1314,20 @@ function startAutoRefresh() {
 
 function resetAutoRefresh() {
   startAutoRefresh();
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  localStorage.setItem('autoRefreshEnabled', autoRefreshEnabled);
+  if (autoRefreshEnabled) {
+    startAutoRefresh();
+    showToast('Auto-refresh enabled (30 min)', 'success', '', 2000);
+  } else {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+    showToast('Auto-refresh disabled', 'warning', '', 2000);
+  }
+  updateAutoRefreshBtn();
 }
 
 // ─── Keyboard navigation ──────────────────────────────────────────────────────
@@ -1472,6 +1497,7 @@ document.getElementById('keyboard-help-btn').addEventListener('click', showKeybo
 document.getElementById('perf-bar').addEventListener('click', () => { if (lastPerfData) showPerfHelp(); });
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
+document.getElementById('auto-refresh-toggle').addEventListener('click', toggleAutoRefresh);
 document.getElementById('refresh-btn').addEventListener('click', () => fetchPRs(true));
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
@@ -1820,4 +1846,5 @@ fetchPRs();
 loadVersion();
 loadRepos();
 loadTeamMembers();
+updateAutoRefreshBtn();
 startAutoRefresh();
