@@ -24,7 +24,26 @@ function pLimit(concurrency) {
 }
 
 // GitHub REST API GET with ETag support (GraphQL endpoint does not support ETags)
+// Secondary rate limit circuit breaker
+let _ghBackoffUntil = 0;
+let _ghBackoffMs = 60 * 1000; // starts at 60s, doubles each hit, caps at 30min
+const GH_BACKOFF_MAX = 30 * 60 * 1000;
+
+function recordSecondaryRateLimit() {
+  _ghBackoffUntil = Date.now() + _ghBackoffMs;
+  console.warn(`GitHub secondary rate limit hit — backing off ${_ghBackoffMs / 1000}s until ${new Date(_ghBackoffUntil).toISOString()}`);
+  _ghBackoffMs = Math.min(_ghBackoffMs * 2, GH_BACKOFF_MAX);
+}
+
+function resetGithubBackoff() {
+  _ghBackoffMs = 60 * 1000;
+}
+
 function githubGet(apiPath, extraHeaders = {}) {
+  if (Date.now() < _ghBackoffUntil) {
+    const waitSec = Math.ceil((_ghBackoffUntil - Date.now()) / 1000);
+    return Promise.resolve({ status: 429, body: `{"message":"secondary rate limit backoff — retry in ${waitSec}s"}`, etag: null, link: null, rateRemaining: -1 });
+  }
   return new Promise((resolve, reject) => {
     const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
     const req = https.request(
@@ -43,13 +62,25 @@ function githubGet(apiPath, extraHeaders = {}) {
       res => {
         let body = '';
         res.on('data', chunk => { body += chunk; });
-        res.on('end', () => resolve({
-          status: res.statusCode,
-          etag: res.headers['etag'] || null,
-          link: res.headers['link'] || null,
-          rateRemaining: parseInt(res.headers['x-ratelimit-remaining'] ?? '-1'),
-          body,
-        }));
+        res.on('end', () => {
+          if (res.statusCode === 403) {
+            try {
+              const parsed = JSON.parse(body);
+              if (parsed.message && parsed.message.includes('rate limit exceeded for user ID')) {
+                recordSecondaryRateLimit();
+              }
+            } catch (_) {}
+          } else if (res.statusCode === 200) {
+            resetGithubBackoff();
+          }
+          resolve({
+            status: res.statusCode,
+            etag: res.headers['etag'] || null,
+            link: res.headers['link'] || null,
+            rateRemaining: parseInt(res.headers['x-ratelimit-remaining'] ?? '-1'),
+            body,
+          });
+        });
       }
     );
     req.on('error', reject);
