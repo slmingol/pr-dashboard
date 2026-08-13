@@ -915,8 +915,13 @@ app.get('/api/pr/:owner/:repo/:number', async (req, res) => {
 app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
   try {
     const { owner, repo, number } = req.params;
-    const { stdout } = await execAsync(`gh pr diff ${number} --repo ${owner}/${repo}`);
-    res.json({ success: true, diff: stdout });
+    const result = await githubGet(
+      `/repos/${owner}/${repo}/pulls/${number}`,
+      { Accept: 'application/vnd.github.diff' }
+    );
+    if (result.status === 429) return res.status(429).json({ success: false, error: result.body });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, error: `GitHub returned ${result.status}` });
+    res.json({ success: true, diff: result.body });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
