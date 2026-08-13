@@ -81,6 +81,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 - View PR details and metadata
 - View diffs with syntax highlighting (unified and split modes, preference saved)
+- Copy PR URL to clipboard (⧉ button on each card)
 - Checkout PR branches locally
 - Open any PR in GitHub
 
@@ -126,7 +127,7 @@ A separate analytics view covering:
 - Compact single-line PR cards for maximum density
 - Toast notifications for actions
 - Keyboard shortcuts for full mouse-free operation
-- Filter preferences (search, state, show-hidden, show-drafts) persist across page loads
+- Filter preferences (search, state, show-hidden, show-drafts, conflicts-only, CI-failures-only) persist across page loads
 
 ## Keyboard Shortcuts
 
