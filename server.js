@@ -296,7 +296,7 @@ let reviewBatchInFlight = false;  // guard against concurrent review batches
 
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (longer TTL; review submission invalidates immediately)
+const CACHE_TTL = 30 * 60 * 1000; // 30 min — matches PR list TTL; review submit invalidates immediately
 const CACHE_FILE = process.env.REVIEW_CACHE_FILE || '/data/review-cache.json';
 
 // Ring buffer of the last 10 GitHub API (review-status REST batch) fetch durations (ms)
@@ -813,28 +813,33 @@ app.get('/api/prs', async (req, res) => {
       }
       hitCount = Object.keys(hits).length;
       missCount = misses.length;
-      console.log(`Review cache: ${hitCount} hits, ${missCount} misses`);
+      // Cap per-call refresh at 20 PRs — spreads cold-start load across reloads
+      // instead of firing 135×3 REST calls at once and hitting the secondary rate limit.
+      // Stale entries outside the cap are served from cache; they'll refresh next call.
+      const MAX_REVIEW_BATCH = 20;
+      const missesToFetch = misses.slice(0, MAX_REVIEW_BATCH);
+      console.log(`Review cache: ${hitCount} hits, ${missCount} misses (fetching ${missesToFetch.length})`);
 
       // Fetch misses via REST+ETag (parallel, concurrency-limited)
       // Skip if another review batch is already running — serve stale cache for this request
       const ghFetchStart = Date.now();
       let restErrors = new Set();
-      if (misses.length > 0 && !reviewBatchInFlight) {
+      if (missesToFetch.length > 0 && !reviewBatchInFlight) {
         reviewBatchInFlight = true;
         try {
-          ({ restErrors } = await fetchReviewStatusRest(misses, currentUser));
+          ({ restErrors } = await fetchReviewStatusRest(missesToFetch, currentUser));
           ghFetchMs = Date.now() - ghFetchStart;
         } finally {
           reviewBatchInFlight = false;
         }
-      } else if (misses.length > 0) {
-        console.log(`Review batch already in flight — serving cached data for ${misses.length} misses`);
+      } else if (missesToFetch.length > 0) {
+        console.log(`Review batch already in flight — serving cached data for ${missesToFetch.length} misses`);
       }
 
       // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
       // Skip REST-failed keys — they need the gh pr view fallback for fresh data,
       // not a potentially stale cache entry that would hide the true review state.
-      for (const pr of misses) {
+      for (const pr of missesToFetch) {
         const key = `${pr.repo}#${pr.number}`;
         if (restErrors.has(key)) continue;
         const cached = reviewCache.get(key);
@@ -843,7 +848,7 @@ app.get('/api/prs', async (req, res) => {
 
       // For anything still not resolved (no REST result and no cache): fall back to
       // gh pr view which goes through the gh CLI and bypasses direct-HTTPS issues.
-      const stillMissing = misses.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
+      const stillMissing = missesToFetch.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
         console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
         await Promise.all(stillMissing.map(async pr => {
@@ -857,7 +862,7 @@ app.get('/api/prs', async (req, res) => {
       }
 
       // Save updated cache to disk (non-blocking)
-      if (misses.length > 0) {
+      if (missesToFetch.length > 0) {
         saveCacheToDisk();
         ghFetchTimesMs.push(ghFetchMs);
         if (ghFetchTimesMs.length > 10) ghFetchTimesMs.shift();
