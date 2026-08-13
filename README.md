@@ -2,7 +2,7 @@
   <img src="docs/banner.svg" alt="PR Dashboard" width="900"/>
 </p>
 
-A containerized pull request dashboard that queries GitHub directly via GraphQL to provide a consolidated view of all monitored PRs with review tracking, metrics, and management features.
+A containerized pull request dashboard that queries GitHub via GraphQL (PR list) and REST (review status, CI checks, merge state) to provide a consolidated view of all monitored PRs with review tracking, metrics, and management features.
 
 ## Screenshots
 
@@ -305,7 +305,7 @@ browser GET /api/prs
 | `prListCache` | 5 min | In-memory PR list; avoids re-fetching GitHub on every Reload |
 | `reviewCache` | 5 min | Per-PR review status; invalidated immediately on your own review actions |
 | REST ETags | server-driven | GitHub returns 304 for unchanged PR review state; saves quota |
-| `_cachedUser` | 10 min | Authenticated username from `gh api user` |
+| `_cachedUser` | 10 min (success) / 35 min (failure) | Authenticated GitHub username; longer failure TTL outlasts the 30-min auto-refresh to prevent rate-limit cascades |
 
 ### API endpoints
 
