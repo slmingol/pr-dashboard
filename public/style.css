@@ -717,6 +717,18 @@ kbd {
   color: white;
 }
 
+.state-danger {
+  background: rgba(232, 124, 115, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(232, 124, 115, 0.5);
+}
+
+.state-conflict {
+  background: rgba(212, 149, 106, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(212, 149, 106, 0.5);
+}
+
 .state-info {
   background: var(--primary);
   color: white;

@@ -524,7 +524,7 @@ function renderPRs(prs, showHidden = false) {
               ${pr.isDraft ? '<span class="state-badge state-draft" title="This is a draft PR">DRAFT</span>' : ''}
               ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
               ${isStale ? `<span class="state-badge state-stale" title="${ageDays} days old">STALE</span>` : ''}
-              ${pr.mergeableState === 'dirty' ? '<span class="state-badge state-danger" title="This PR has merge conflicts">CONFLICT</span>' : ''}
+              ${pr.mergeableState === 'dirty' ? '<span class="state-badge state-conflict" title="This PR has merge conflicts">CONFLICT</span>' : ''}
               ${pr.ciStatus?.state === 'FAILURE' ? '<span class="state-badge state-danger" title="CI checks are failing">CI FAIL</span>' : pr.ciStatus?.state === 'PENDING' ? '<span class="state-badge state-warning" title="CI checks are in progress">CI ...</span>' : pr.ciStatus?.state === 'SUCCESS' ? '<span class="state-badge state-success" title="All CI checks passed">CI ✓</span>' : pr.ciStatus === null && pr.headSha ? '<span class="state-badge state-muted" title="CI status loading — refresh to update">CI ?</span>' : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
