@@ -431,7 +431,7 @@ function processReviewData(data, username) {
 async function fetchReviewStatusRest(prs, username) {
   if (prs.length === 0) return { results: {}, restErrors: new Set() };
 
-  const limit = pLimit(5);
+  const limit = pLimit(3);
   const results = {};
   const restErrors = new Set(); // keys that failed — callers should use gh fallback
   let fetched = 0, notModified = 0, errors = 0;
@@ -447,11 +447,11 @@ async function fetchReviewStatusRest(prs, username) {
       const rvHeaders = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
 
       const headSha = cached?.headSha || pr.headSha;
-      const [prRes, rvRes1, ciRes] = await Promise.all([
-        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}`, prHeaders),
-        githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=100`, rvHeaders),
-        headSha ? githubGet(`/repos/${owner}/${repo}/commits/${headSha}/check-runs?per_page=100`) : Promise.resolve(null),
-      ]);
+      // Sequential to cap concurrent GitHub requests at pLimit(3) total — parallel
+      // would multiply to 3× concurrency and re-trigger the secondary rate limit.
+      const prRes  = await githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}`, prHeaders);
+      const rvRes1 = await githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=100`, rvHeaders);
+      const ciRes  = headSha ? await githubGet(`/repos/${owner}/${repo}/commits/${headSha}/check-runs?per_page=100`) : null;
 
       // Paginate reviews if there are more pages
       let rawReviews, newReviewsEtag;
