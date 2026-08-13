@@ -177,6 +177,8 @@ async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
 const prListCache = { prs: null, fetchedAt: 0, rateInfo: null };
 const PR_LIST_TTL = 30 * 60 * 1000;
+let prListFetchInFlight = null;   // dedup concurrent PR list fetches
+let reviewBatchInFlight = false;  // guard against concurrent review batches
 
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
@@ -651,7 +653,12 @@ app.get('/api/prs', async (req, res) => {
     } else {
       const { repos } = await getSubscribedRepos();
       if (repos.length > 0) {
-        const result = await fetchAllOpenPRsFromGitHub(repos, null);
+        // Dedup: if a fetch is already running, wait for it rather than launching another
+        if (!prListFetchInFlight) {
+          prListFetchInFlight = fetchAllOpenPRsFromGitHub(repos, null)
+            .finally(() => { prListFetchInFlight = null; });
+        }
+        const result = await prListFetchInFlight;
         prs = result.prs;
         if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
           console.warn(`fetchAllOpenPRs returned 0; keeping cached ${prListCache.prs.length} PRs`);
@@ -695,11 +702,19 @@ app.get('/api/prs', async (req, res) => {
       console.log(`Review cache: ${hitCount} hits, ${missCount} misses`);
 
       // Fetch misses via REST+ETag (parallel, concurrency-limited)
+      // Skip if another review batch is already running — serve stale cache for this request
       const ghFetchStart = Date.now();
       let restErrors = new Set();
-      if (misses.length > 0) {
-        ({ restErrors } = await fetchReviewStatusRest(misses, currentUser));
-        ghFetchMs = Date.now() - ghFetchStart;
+      if (misses.length > 0 && !reviewBatchInFlight) {
+        reviewBatchInFlight = true;
+        try {
+          ({ restErrors } = await fetchReviewStatusRest(misses, currentUser));
+          ghFetchMs = Date.now() - ghFetchStart;
+        } finally {
+          reviewBatchInFlight = false;
+        }
+      } else if (misses.length > 0) {
+        console.log(`Review batch already in flight — serving cached data for ${misses.length} misses`);
       }
 
       // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
