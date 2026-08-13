@@ -102,14 +102,10 @@
         <input type="checkbox" id="show-drafts" checked />
         Show Drafts (<span id="draft-count">0</span>)
       </label>
-      <label class="checkbox-label">
-        <input type="checkbox" id="filter-conflicts" />
-        Conflicts Only
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" id="filter-ci-fail" />
-        CI Failures Only
-      </label>
+      <input type="checkbox" id="filter-conflicts" class="filter-pill-input" />
+      <label for="filter-conflicts" class="btn btn-small filter-pill filter-pill-conflict">⚡ Conflicts</label>
+      <input type="checkbox" id="filter-ci-fail" class="filter-pill-input" />
+      <label for="filter-ci-fail" class="btn btn-small filter-pill filter-pill-ci">✗ CI Fail</label>
       <button id="reset-filters-btn" class="btn btn-muted btn-small" title="Reset all filters to defaults">Reset</button>
     </div>
 

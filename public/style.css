@@ -315,6 +315,40 @@ h1 {
   height: 1rem;
 }
 
+.filter-pill-input {
+  display: none;
+}
+
+.filter-pill {
+  cursor: pointer;
+  opacity: 0.55;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.filter-pill-conflict {
+  color: var(--warning);
+  background: rgba(212, 149, 106, 0.1);
+}
+
+.filter-pill-ci {
+  color: var(--danger);
+  background: rgba(232, 124, 115, 0.1);
+}
+
+.filter-pill-input:checked + .filter-pill {
+  opacity: 1;
+  border-color: currentColor;
+}
+
+.filter-pill-input:checked + .filter-pill-conflict {
+  background: rgba(212, 149, 106, 0.2);
+}
+
+.filter-pill-input:checked + .filter-pill-ci {
+  background: rgba(232, 124, 115, 0.22);
+}
+
 .loading, .error {
   text-align: center;
   padding: 2rem;
