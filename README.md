@@ -60,7 +60,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 - **Consolidated PR view** -- all open PRs across monitored repos, grouped by repository with sticky headers
 - **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
-- **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage
+- **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage; **Unhide All** button in the filter bar clears all hidden PRs at once
 - **Watch-only repos** -- mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal
 - **Repo management** -- add or remove watched repos directly from the UI without editing config files
 - **Team member highlighting** -- PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 10 minutes
@@ -89,7 +89,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 - **Refresh Data** -- queries all monitored repositories via 10 concurrent REST requests with ETag caching; typically ~7s for 100+ repos; streams real per-repo progress via SSE
 - **Auto-refresh** -- silently runs a full refresh every 30 minutes while the tab is open; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires; toggle with the `⏱ Auto: ON/OFF` button in the header (state persists in localStorage)
-- **Reload** -- returns the cached PR list instantly (in-memory cache, 5-minute TTL) without hitting GitHub
+- **Reload** -- returns the cached PR list instantly (in-memory cache, 30-minute TTL matching the auto-refresh interval) without hitting GitHub
 - **Resilient caching** -- on 403/429/5xx responses, the server serves the last known PR list from its ETag cache rather than returning empty results; protects against GitHub IP outages and secondary rate limits
 - **Performance bar** -- displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
 
@@ -282,7 +282,7 @@ browser SSE connect → /api/refresh-ghreport-stream
   → fetchAllOpenPRsFromGitHub: pLimit(10) concurrent GraphQL queries
       each query: { rateLimit { cost remaining } repository { pullRequests { ... } } }
   → fetch /rate_limit REST endpoint for REST quota snapshot
-  → store results in prListCache (in-memory, 5-min TTL)
+  → store results in prListCache (in-memory, 30-min TTL)
   → report real per-repo progress events back to browser (~7s for 126 repos)
 ```
 
@@ -303,7 +303,7 @@ browser GET /api/prs
 
 | Layer | TTL | Purpose |
 |-------|-----|---------|
-| `prListCache` | 5 min | In-memory PR list; avoids re-fetching GitHub on every Reload |
+| `prListCache` | 30 min | In-memory PR list; avoids re-fetching GitHub on every Reload; TTL matches auto-refresh interval |
 | `reviewCache` | 5 min | Per-PR review status; invalidated immediately on your own review actions |
 | REST ETags | server-driven | GitHub returns 304 for unchanged PR review state; saves quota |
 | `_cachedUser` | 10 min (success) / 35 min (failure) | Authenticated GitHub username; longer failure TTL outlasts the 30-min auto-refresh to prevent rate-limit cascades |
