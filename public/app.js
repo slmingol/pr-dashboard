@@ -151,6 +151,15 @@ function updateHiddenCount() {
   }
 }
 
+function unhideAll() {
+  const n = Object.keys(hiddenPRs).length;
+  if (n === 0) return;
+  hiddenPRs = {};
+  saveHiddenPRs();
+  filterAndRenderPRs();
+  showToast(`Unhid ${n} PR${n !== 1 ? 's' : ''}`, 'success', '', 2000);
+}
+
 // Update statistics
 function updateStats() {
   const total = allPRs.length;
@@ -360,7 +369,7 @@ function filterAndRenderPRs() {
   const onlyCiFail = document.getElementById('filter-ci-fail').checked;
 
   saveFilterPrefs();
-  renderLimit = 100;
+  renderLimit = Infinity;
   filteredPRs = allPRs.filter(pr => {
     const matchesSearch = pr.title?.toLowerCase().includes(searchTerm) ||
                          pr.repo?.toLowerCase().includes(searchTerm) ||

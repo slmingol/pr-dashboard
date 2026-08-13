@@ -176,7 +176,7 @@ async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
 
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
 const prListCache = { prs: null, fetchedAt: 0, rateInfo: null };
-const PR_LIST_TTL = 5 * 60 * 1000;
+const PR_LIST_TTL = 30 * 60 * 1000;
 
 // Cache for review statuses to handle transient API failures
 const reviewCache = new Map(); // key: 'owner/repo#number', value: { status, timestamp }
