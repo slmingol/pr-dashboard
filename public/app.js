@@ -112,7 +112,7 @@ function loadFilterPrefs() {
   if (search !== null) document.getElementById('search').value = search;
   if (state !== null) document.getElementById('state-filter').value = state;
   if (showHidden !== null) document.getElementById('show-hidden').checked = showHidden === 'true';
-  document.getElementById('show-drafts').checked = showDrafts === null ? false : showDrafts === 'true';
+  document.getElementById('show-drafts').checked = showDrafts === null ? true : showDrafts === 'true';
   if (conflicts !== null) document.getElementById('filter-conflicts').checked = conflicts === 'true';
   if (ciFail !== null) document.getElementById('filter-ci-fail').checked = ciFail === 'true';
 }
@@ -375,6 +375,11 @@ function filterAndRenderPRs() {
     return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail;
   });
 
+  const currentIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
+  for (const key of Object.keys(reviewStateHistory)) {
+    if (!currentIds.has(key)) delete reviewStateHistory[key];
+  }
+
   renderPRs(filteredPRs, showHidden);
   updateStats();
 }
@@ -502,6 +507,7 @@ function renderPRs(prs, showHidden = false) {
               <button class="btn btn-small ${isHidden ? 'btn-success' : 'btn-muted'}" onclick="toggleHidePR('${prId}', '${owner}', '${repoName}', '${number}')" title="${isHidden ? 'Unhide this PR from the list' : 'Hide this PR from the list'}">
                 ${isHidden ? '👁' : '🙈'}
               </button>
+              <button class="btn btn-small btn-muted" onclick="navigator.clipboard.writeText('${pr.url}').then(()=>showToast('URL copied','success','',1500))" title="Copy PR URL to clipboard">⧉</button>
               <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')" title="View PR description and details">Details</button>
               <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')" title="View code changes">Diff</button>
               ${!isWatchOnly ? `
