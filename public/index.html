@@ -101,6 +101,14 @@
         <input type="checkbox" id="show-drafts" checked />
         Show Drafts (<span id="draft-count">0</span>)
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="filter-conflicts" />
+        Conflicts Only
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="filter-ci-fail" />
+        CI Failures Only
+      </label>
       <button id="reset-filters-btn" class="btn btn-muted btn-small" title="Reset all filters to defaults">Reset</button>
     </div>
 
@@ -131,6 +139,10 @@
           </div>
           <div class="modal-scroll-area" style="display:flex;flex-direction:column;gap:0.75rem">
             <textarea id="comment-input" placeholder="Add your comment here..." rows="6"></textarea>
+            <details id="pr-template-details" class="hidden">
+              <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-muted);user-select:none">PR Template</summary>
+              <pre id="pr-template-content" style="font-size:0.75rem;white-space:pre-wrap;background:var(--surface-alt,var(--surface));border:1px solid var(--border);border-radius:4px;padding:0.5rem;margin-top:0.4rem;max-height:200px;overflow-y:auto;color:var(--text-muted)"></pre>
+            </details>
             <div class="modal-actions">
               <button id="comment-cancel" class="btn btn-muted">Cancel</button>
               <button id="comment-submit" class="btn btn-primary">Submit</button>

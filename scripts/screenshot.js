@@ -41,6 +41,7 @@ const FAKE_PRS = [
     reviewDecision: null,
     repository: { nameWithOwner: 'acme-corp/api-gateway' },
     metadata: { age: '1d', reviewDecision: '', mergeable: '' },
+    ciStatus: { state: 'FAILURE' },
   },
   {
     id: 'acme-corp/api-gateway#408', repo: 'acme-corp/api-gateway', number: 408,
@@ -52,6 +53,7 @@ const FAKE_PRS = [
     reviewDecision: 'APPROVED',
     repository: { nameWithOwner: 'acme-corp/api-gateway' },
     metadata: { age: '3d', reviewDecision: 'APPROVED', mergeable: '' },
+    ciStatus: { state: 'SUCCESS' },
   },
   {
     id: 'acme-corp/infra#89', repo: 'acme-corp/infra', number: 89,
@@ -63,6 +65,8 @@ const FAKE_PRS = [
     reviewDecision: null,
     repository: { nameWithOwner: 'acme-corp/infra' },
     metadata: { age: '7d', reviewDecision: '', mergeable: '' },
+    mergeableState: 'dirty',
+    ciStatus: { state: 'PENDING' },
   },
   {
     id: 'acme-corp/infra#87', repo: 'acme-corp/infra', number: 87,

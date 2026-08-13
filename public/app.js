@@ -98,6 +98,8 @@ function saveFilterPrefs() {
   localStorage.setItem('filterState', document.getElementById('state-filter').value);
   localStorage.setItem('filterShowHidden', document.getElementById('show-hidden').checked);
   localStorage.setItem('filterShowDrafts', document.getElementById('show-drafts').checked);
+  localStorage.setItem('filterConflicts', document.getElementById('filter-conflicts').checked);
+  localStorage.setItem('filterCiFail', document.getElementById('filter-ci-fail').checked);
 }
 
 function loadFilterPrefs() {
@@ -105,10 +107,14 @@ function loadFilterPrefs() {
   const state = localStorage.getItem('filterState');
   const showHidden = localStorage.getItem('filterShowHidden');
   const showDrafts = localStorage.getItem('filterShowDrafts');
+  const conflicts = localStorage.getItem('filterConflicts');
+  const ciFail = localStorage.getItem('filterCiFail');
   if (search !== null) document.getElementById('search').value = search;
   if (state !== null) document.getElementById('state-filter').value = state;
   if (showHidden !== null) document.getElementById('show-hidden').checked = showHidden === 'true';
   document.getElementById('show-drafts').checked = showDrafts === null ? false : showDrafts === 'true';
+  if (conflicts !== null) document.getElementById('filter-conflicts').checked = conflicts === 'true';
+  if (ciFail !== null) document.getElementById('filter-ci-fail').checked = ciFail === 'true';
 }
 
 function resetFilters() {
@@ -116,7 +122,9 @@ function resetFilters() {
   document.getElementById('state-filter').value = 'all';
   document.getElementById('show-hidden').checked = false;
   document.getElementById('show-drafts').checked = false;
-  ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts'].forEach(k => localStorage.removeItem(k));
+  document.getElementById('filter-conflicts').checked = false;
+  document.getElementById('filter-ci-fail').checked = false;
+  ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts', 'filterConflicts', 'filterCiFail'].forEach(k => localStorage.removeItem(k));
   filterAndRenderPRs();
 }
 
@@ -348,6 +356,8 @@ function filterAndRenderPRs() {
   const stateFilter = document.getElementById('state-filter').value;
   const showHidden = document.getElementById('show-hidden').checked;
   const showDrafts = document.getElementById('show-drafts').checked;
+  const onlyConflicts = document.getElementById('filter-conflicts').checked;
+  const onlyCiFail = document.getElementById('filter-ci-fail').checked;
 
   saveFilterPrefs();
   renderLimit = 100;
@@ -360,7 +370,9 @@ function filterAndRenderPRs() {
     const isHidden = hiddenPRs.hasOwnProperty(prId);
     const matchesHidden = showHidden || !isHidden;
     const matchesDraft = showDrafts || !pr.isDraft;
-    return matchesSearch && matchesState && matchesHidden && matchesDraft;
+    const matchesConflict = !onlyConflicts || pr.mergeableState === 'dirty';
+    const matchesCiFail = !onlyCiFail || pr.ciStatus?.state === 'FAILURE';
+    return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail;
   });
 
   renderPRs(filteredPRs, showHidden);
@@ -482,6 +494,8 @@ function renderPRs(prs, showHidden = false) {
               ${pr.isDraft ? '<span class="state-badge state-draft" title="This is a draft PR">DRAFT</span>' : ''}
               ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
               ${isStale ? `<span class="state-badge state-stale" title="${ageDays} days old">STALE</span>` : ''}
+              ${pr.mergeableState === 'dirty' ? '<span class="state-badge state-danger" title="This PR has merge conflicts">CONFLICT</span>' : ''}
+              ${pr.ciStatus?.state === 'FAILURE' ? '<span class="state-badge state-danger" title="CI checks are failing">CI FAIL</span>' : pr.ciStatus?.state === 'PENDING' ? '<span class="state-badge state-warning" title="CI checks are in progress">CI ...</span>' : pr.ciStatus?.state === 'SUCCESS' ? '<span class="state-badge state-success" title="All CI checks passed">CI ✓</span>' : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
@@ -910,7 +924,28 @@ async function checkoutPR(owner, repo, number) {
 }
 
 // Add comment
+async function loadPrTemplate(owner, repo) {
+  try {
+    const r = await fetch(`/api/pr-template/${owner}/${repo}`);
+    const d = await r.json();
+    return d.success ? d.content : null;
+  } catch (_) { return null; }
+}
+
+function showPrTemplate(content) {
+  const details = document.getElementById('pr-template-details');
+  const pre = document.getElementById('pr-template-content');
+  if (content) {
+    pre.textContent = content;
+    details.classList.remove('hidden');
+  } else {
+    details.classList.add('hidden');
+  }
+}
+
 async function addComment(owner, repo, number) {
+  const template = await loadPrTemplate(owner, repo);
+  showPrTemplate(template);
   const comment = await showCommentModal(
     `Add comment to ${owner}/${repo} #${number}`,
     'Add your comment here...',
@@ -947,7 +982,9 @@ async function addComment(owner, repo, number) {
 async function reviewPR(owner, repo, number, action) {
   const actionText = action === 'approve' ? 'Approve' : 'Request Changes';
   const required = action === 'request-changes';
-  
+
+  const template = await loadPrTemplate(owner, repo);
+  showPrTemplate(template);
   const comment = await showCommentModal(
     `${actionText} ${owner}/${repo} #${number}`,
     required ? 'Comment (required for requesting changes)' : 'Optional comment',
@@ -1164,10 +1201,11 @@ function showCommentModal(title, placeholder = 'Add your comment here...', requi
 function hideCommentModal() {
   const modal = document.getElementById('comment-modal');
   const input = document.getElementById('comment-input');
-  
+
   modal.classList.add('hidden');
-  input.value = ''; // Clear the textarea
+  input.value = '';
   commentModalCallback = null;
+  showPrTemplate(null);
 }
 
 function submitCommentModal() {
@@ -1503,6 +1541,8 @@ document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
 document.getElementById('show-hidden').addEventListener('change', filterAndRenderPRs);
 document.getElementById('show-drafts').addEventListener('change', filterAndRenderPRs);
+document.getElementById('filter-conflicts').addEventListener('change', filterAndRenderPRs);
+document.getElementById('filter-ci-fail').addEventListener('change', filterAndRenderPRs);
 document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
 
 document.querySelector('.close').addEventListener('click', hideModal);

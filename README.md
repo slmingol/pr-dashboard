@@ -64,7 +64,10 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 - **Watch-only repos** -- mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal
 - **Repo management** -- add or remove watched repos directly from the UI without editing config files
 - **Team member highlighting** -- PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 10 minutes
-- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, or draft status
+- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, draft status, merge conflicts, or CI failures
+- **CI/CD status indicators** -- per-PR badges for CI FAIL / CI ... / CI ✓ derived from GitHub check-runs; "CI Failures Only" filter to isolate broken PRs
+- **Merge conflict detection** -- CONFLICT badge on PRs with `mergeable_state: dirty`; "Conflicts Only" filter; state refreshed on every review status poll
+- **PR template preview** -- when opening a comment or review modal, the repo's PR template (`.github/PULL_REQUEST_TEMPLATE.md` or equivalent) is fetched and shown as a collapsible reference; cached for 1 hour per repo
 - **Statistics bar** -- real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
 
 ### Review workflow
@@ -255,6 +258,8 @@ volumes:
 | `filterState` | Last state filter value |
 | `filterShowHidden` | Last show-hidden checkbox state |
 | `filterShowDrafts` | Last show-drafts checkbox state (default: off) |
+| `filterConflicts` | Last "Conflicts Only" filter state |
+| `filterCiFail` | Last "CI Failures Only" filter state |
 
 ## Architecture
 
@@ -309,6 +314,7 @@ browser GET /api/prs
 | GET | `/api/prs` | All PRs with review status and perf metadata |
 | GET | `/api/user` | Current authenticated GitHub user |
 | GET | `/api/team-members` | Members of the configured GitHub team (10-min cache) |
+| GET | `/api/pr-template/:owner/:repo` | PR template content for a repo (1-hour cache; returns `null` if none) |
 | GET | `/api/repos` | Subscribed repo list |
 | POST | `/api/repos` | Add a repo (`{ repo: "owner/name" }`) to config.yaml |
 | DELETE | `/api/repos/:owner/:name` | Remove a repo from config.yaml |

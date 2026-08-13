@@ -82,7 +82,18 @@ function mapRestPR(repo, pr) {
     reviewDecision: null,
     repository: { nameWithOwner: repo },
     metadata: { age: '', reviewDecision: '', mergeable: '' },
+    headSha: pr.head?.sha || null,
   };
+}
+
+function parseCiStatus(checkRuns) {
+  if (!checkRuns || !checkRuns.length) return null;
+  const active = checkRuns.filter(r => r.status !== 'completed' || r.conclusion === null);
+  if (active.length > 0) return { state: 'PENDING' };
+  const bad = ['failure', 'timed_out', 'action_required', 'cancelled'];
+  if (checkRuns.some(r => bad.includes(r.conclusion))) return { state: 'FAILURE' };
+  if (checkRuns.every(r => ['success', 'neutral', 'skipped'].includes(r.conclusion))) return { state: 'SUCCESS' };
+  return { state: 'PENDING' };
 }
 
 // Per-repo ETag cache for the open-PR list (REST GET supports conditional requests; GraphQL does not)
@@ -319,9 +330,11 @@ async function fetchReviewStatusRest(prs, username) {
       // reviewsEtag is only set for single-page responses; null means multi-page (always re-fetch)
       const rvHeaders = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
 
-      const [prRes, rvRes1] = await Promise.all([
+      const headSha = cached?.headSha || pr.headSha;
+      const [prRes, rvRes1, ciRes] = await Promise.all([
         githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}`, prHeaders),
         githubGet(`/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=100`, rvHeaders),
+        headSha ? githubGet(`/repos/${owner}/${repo}/commits/${headSha}/check-runs?per_page=100`) : Promise.resolve(null),
       ]);
 
       // Paginate reviews if there are more pages
@@ -353,10 +366,16 @@ async function fetchReviewStatusRest(prs, username) {
       }
 
       const rawPr = prRes.status === 200
-        ? (() => { const d = JSON.parse(prRes.body); return { title: d.title, user: d.user, state: d.state, draft: d.draft, merged: d.merged, updated_at: d.updated_at, created_at: d.created_at, review_decision: d.review_decision }; })()
+        ? (() => { const d = JSON.parse(prRes.body); return { title: d.title, user: d.user, state: d.state, draft: d.draft, merged: d.merged, updated_at: d.updated_at, created_at: d.created_at, review_decision: d.review_decision, mergeable_state: d.mergeable_state, head_sha: d.head?.sha }; })()
         : cached?.rawPr;
 
       if (!rawPr) { errors++; restErrors.add(key); return; }
+
+      const currentHeadSha = rawPr.head_sha || headSha;
+      const checkRuns = ciRes?.status === 200
+        ? JSON.parse(ciRes.body).check_runs || []
+        : (cached?.checkRuns || []);
+      const ciStatus = parseCiStatus(checkRuns);
 
       const prMeta = {
         title: rawPr.title,
@@ -365,6 +384,8 @@ async function fetchReviewStatusRest(prs, username) {
         reviewDecision: rawPr.review_decision || null,
         isDraft: rawPr.draft || false,
         createdAt: rawPr.created_at || null,
+        mergeableState: rawPr.mergeable_state || null,
+        ciStatus,
       };
 
       const allUserReviews = rawReviews.filter(r => r.user?.login === username);
@@ -389,6 +410,8 @@ async function fetchReviewStatusRest(prs, username) {
         reviewsEtag: newReviewsEtag,
         rawPr,
         rawReviews,
+        headSha: currentHeadSha,
+        checkRuns,
       });
       results[key] = status;
       fetched++;
@@ -578,6 +601,36 @@ app.get('/api/team-members', async (req, res) => {
   }
 });
 
+const prTemplateCache = new Map(); // repo → { content, fetchedAt }
+const PR_TEMPLATE_TTL = 60 * 60 * 1000; // 1 hour
+const PR_TEMPLATE_PATHS = [
+  '.github/PULL_REQUEST_TEMPLATE.md',
+  '.github/pull_request_template.md',
+  'PULL_REQUEST_TEMPLATE.md',
+];
+
+app.get('/api/pr-template/:owner/:repo', async (req, res) => {
+  const { owner, repo } = req.params;
+  const key = `${owner}/${repo}`;
+  const cached = prTemplateCache.get(key);
+  if (cached && (Date.now() - cached.fetchedAt) < PR_TEMPLATE_TTL) {
+    return res.json({ success: true, content: cached.content });
+  }
+  for (const path of PR_TEMPLATE_PATHS) {
+    try {
+      const r = await githubGet(`/repos/${owner}/${repo}/contents/${path}`);
+      if (r.status === 200) {
+        const data = JSON.parse(r.body);
+        const content = Buffer.from(data.content, 'base64').toString('utf-8');
+        prTemplateCache.set(key, { content, fetchedAt: Date.now() });
+        return res.json({ success: true, content });
+      }
+    } catch (_) {}
+  }
+  prTemplateCache.set(key, { content: null, fetchedAt: Date.now() });
+  res.json({ success: true, content: null });
+});
+
 app.get('/api/user', async (req, res) => {
   try {
     const username = await getCurrentUser();
@@ -692,6 +745,8 @@ app.get('/api/prs', async (req, res) => {
           if (reviewStatus.prMeta.state) pr.state = reviewStatus.prMeta.state;
           if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
           if (reviewStatus.prMeta.createdAt) pr.createdAt = reviewStatus.prMeta.createdAt;
+          if (reviewStatus.prMeta.mergeableState) pr.mergeableState = reviewStatus.prMeta.mergeableState;
+          if (reviewStatus.prMeta.ciStatus) pr.ciStatus = reviewStatus.prMeta.ciStatus;
         }
         return { ...pr, reviewStatus };
       });
