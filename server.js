@@ -88,6 +88,54 @@ function githubGet(apiPath, extraHeaders = {}) {
     req.end();
   });
 }
+// POST to the GitHub API (used for GraphQL). Same circuit-breaker as githubGet.
+function githubPost(apiPath, body) {
+  if (Date.now() < _ghBackoffUntil) {
+    const waitSec = Math.ceil((_ghBackoffUntil - Date.now()) / 1000);
+    return Promise.resolve({ status: 429, body: `{"message":"secondary rate limit backoff — retry in ${waitSec}s"}` });
+  }
+  return new Promise((resolve, reject) => {
+    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const payload = JSON.stringify(body);
+    const req = https.request(
+      {
+        hostname: 'api.github.com',
+        path: apiPath,
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'pr-dashboard',
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      },
+      res => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 403) {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.message && parsed.message.includes('rate limit exceeded for user ID')) {
+                recordSecondaryRateLimit();
+              }
+            } catch (_) {}
+          } else if (res.statusCode === 200) {
+            resetGithubBackoff();
+          }
+          resolve({ status: res.statusCode, body: data });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(30000, () => req.destroy(new Error('GitHub GraphQL timeout')));
+    req.write(payload);
+    req.end();
+  });
+}
+
 // Extract the path portion of a GitHub "next" Link header, or null if absent.
 function parseNextLink(linkHeader) {
   if (!linkHeader) return null;
@@ -127,82 +175,117 @@ function parseCiStatus(checkRuns) {
   return { state: 'PENDING' };
 }
 
-// Per-repo ETag cache for the open-PR list (REST GET supports conditional requests; GraphQL does not)
-const prListEtagCache = new Map(); // repo → { etag, prs, pageCount }
+// Fallback cache for the PR list — stores last-known prs per repo.
+// GraphQL has no ETags; this is used only when a GraphQL batch fails for a repo.
+const prListEtagCache = new Map(); // repo → { prs }
 
-// Fetch open PRs for one repo via REST with ETag support.
-// 304 Not Modified = free (exempt from rate limiting); only repos with changes cost quota.
-async function fetchRepoPRsRest(repo) {
-  const [owner, name] = repo.split('/');
-  const cached = prListEtagCache.get(repo);
+// 50 repos/query stays well under GitHub GraphQL complexity limits.
+// 127 repos → 3 requests instead of 127 REST calls.
+const GQL_BATCH_SIZE = 50;
+const GQL_PR_FIELDS = 'number title url isDraft author { login } createdAt updatedAt headRefOid';
 
-  // Send If-None-Match only for single-page repos; multi-page repos have per-page ETags
-  // which don't cover the full list, so we skip the optimisation and always re-fetch.
-  const etag = (cached?.pageCount === 1 && cached.etag) ? cached.etag : null;
-  const result = await githubGet(
-    `/repos/${owner}/${name}/pulls?state=open&per_page=100`,
-    etag ? { 'If-None-Match': etag } : {}
-  );
-
-  if (result.status === 304 && cached) {
-    return { prs: cached.prs, fromCache: true };
-  }
-
-  if (result.status !== 200) {
-    if (result.status === 403 || result.status === 429 || result.status >= 500) {
-      console.warn(`fetchRepoPRsRest ${repo}: HTTP ${result.status}${cached ? ' — using stale cache' : ' — no cache'}`);
-      if (cached) return { prs: cached.prs, fromCache: true };
-    }
-    return { prs: [], fromCache: false };
-  }
-
-  const page1 = JSON.parse(result.body);
-  let prs = page1.map(pr => mapRestPR(repo, pr));
-  let pageCount = 1;
-
-  if (page1.length === 100) {
-    let pageNum = 2;
-    for (;;) {
-      const next = await githubGet(
-        `/repos/${owner}/${name}/pulls?state=open&per_page=100&page=${pageNum}`
-      );
-      if (next.status !== 200) break;
-      const data = JSON.parse(next.body);
-      if (!data.length) break;
-      prs = prs.concat(data.map(pr => mapRestPR(repo, pr)));
-      pageCount++;
-      if (data.length < 100) break;
-      pageNum++;
-    }
-  }
-
-  prListEtagCache.set(repo, { etag: result.etag || null, prs, pageCount });
-  return { prs, fromCache: false };
+function buildBatchQuery(batch) {
+  return '{ ' + batch.map((repo, i) => {
+    const [owner, name] = repo.split('/');
+    return `r${i}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+      pullRequests(states: OPEN, first: 100) {
+        nodes { ${GQL_PR_FIELDS} }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`;
+  }).join('\n') + ' }';
 }
 
-// Fetch all open PRs across all repos concurrently (10 parallel REST requests)
+function mapGraphQLPR(repo, pr) {
+  return {
+    id: `${repo}#${pr.number}`,
+    repo,
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    state: 'OPEN',
+    isDraft: pr.isDraft || false,
+    author: pr.author || { login: '' },
+    createdAt: pr.createdAt,
+    updatedAt: pr.updatedAt,
+    reviewDecision: null,
+    repository: { nameWithOwner: repo },
+    metadata: { age: '', reviewDecision: '', mergeable: '' },
+    headSha: pr.headRefOid || null,
+  };
+}
+
+// Fetch all open PRs via batched GraphQL (50 repos/query).
+// Falls back to stale prListEtagCache for any repo the batch fails to return.
 async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
-  const limit = pLimit(10);
-  let done = 0;
-  let listHits = 0, listMisses = 0;
+  let allPrs = [];
+  let listHits = 0, listMisses = 0, done = 0;
 
-  const results = await Promise.all(
-    repos.map(repo => limit(async () => {
-      try {
-        const { prs, fromCache } = await fetchRepoPRsRest(repo);
-        if (fromCache) listHits++; else listMisses++;
-        if (onProgress) onProgress(++done, repos.length);
-        return prs;
-      } catch (err) {
-        console.error(`REST fetch error for ${repo}: ${err.message}`);
-        listMisses++;
-        if (onProgress) onProgress(++done, repos.length);
-        return [];
+  const batches = [];
+  for (let i = 0; i < repos.length; i += GQL_BATCH_SIZE) {
+    batches.push(repos.slice(i, i + GQL_BATCH_SIZE));
+  }
+
+  for (const batch of batches) {
+    let gqlData = null;
+    try {
+      const res = await githubPost('/graphql', { query: buildBatchQuery(batch) });
+      if (res.status === 200) {
+        const parsed = JSON.parse(res.body);
+        if (parsed.data) gqlData = parsed.data;
+        if (parsed.errors) {
+          console.warn('GraphQL partial errors:', parsed.errors.map(e => e.message).join('; '));
+        }
+      } else {
+        console.warn(`GraphQL batch HTTP ${res.status}`);
       }
-    }))
-  );
+    } catch (err) {
+      console.warn('GraphQL batch error:', err.message);
+    }
 
-  return { prs: results.flat(), listHits, listMisses };
+    for (let i = 0; i < batch.length; i++) {
+      const repo = batch[i];
+      const repoData = gqlData?.[`r${i}`];
+
+      if (!repoData) {
+        const cached = prListEtagCache.get(repo);
+        if (cached) { allPrs = allPrs.concat(cached.prs); listHits++; }
+        else listMisses++;
+        if (onProgress) onProgress(++done, repos.length);
+        continue;
+      }
+
+      let prs = repoData.pullRequests.nodes.map(pr => mapGraphQLPR(repo, pr));
+      let pageInfo = repoData.pullRequests.pageInfo;
+
+      // Paginate within this repo if it has > 100 open PRs (rare)
+      while (pageInfo.hasNextPage) {
+        const [owner, name] = repo.split('/');
+        try {
+          const nextRes = await githubPost('/graphql', { query: `{
+            repo: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+              pullRequests(states: OPEN, first: 100, after: ${JSON.stringify(pageInfo.endCursor)}) {
+                nodes { ${GQL_PR_FIELDS} }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }` });
+          if (nextRes.status !== 200) break;
+          const nextData = JSON.parse(nextRes.body).data?.repo;
+          if (!nextData) break;
+          prs = prs.concat(nextData.pullRequests.nodes.map(pr => mapGraphQLPR(repo, pr)));
+          pageInfo = nextData.pullRequests.pageInfo;
+        } catch (_) { break; }
+      }
+
+      prListEtagCache.set(repo, { prs });
+      allPrs = allPrs.concat(prs);
+      listMisses++;
+      if (onProgress) onProgress(++done, repos.length);
+    }
+  }
+
+  return { prs: allPrs, listHits, listMisses };
 }
 
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
@@ -348,7 +431,7 @@ function processReviewData(data, username) {
 async function fetchReviewStatusRest(prs, username) {
   if (prs.length === 0) return { results: {}, restErrors: new Set() };
 
-  const limit = pLimit(8);
+  const limit = pLimit(5);
   const results = {};
   const restErrors = new Set(); // keys that failed — callers should use gh fallback
   let fetched = 0, notModified = 0, errors = 0;
