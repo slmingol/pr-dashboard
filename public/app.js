@@ -10,6 +10,7 @@ let lastPerfData = null;
 let autoRefreshTimer = null;
 let lastAutoRefreshAt = null;
 const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+let refreshStreamInProgress = false;
 let teamMembers = new Set();
 
 function parseAgeDays(ageStr) {
@@ -1285,6 +1286,11 @@ function escapeHtml(text) {
 
 // Core SSE refresh stream runner. silent=true skips button/progress UI.
 async function runRefreshStream({ silent = false } = {}) {
+  if (refreshStreamInProgress) {
+    if (!silent) showToast('Refresh already in progress', 'warning', '', 2000);
+    return;
+  }
+  refreshStreamInProgress = true;
   const btn = document.getElementById('refresh-ghreport-btn');
   const progressContainer = document.getElementById('refresh-progress');
   const progressFill = document.querySelector('.progress-fill');
@@ -1306,6 +1312,7 @@ async function runRefreshStream({ silent = false } = {}) {
 
     const cleanup = (ok) => {
       eventSource.close();
+      refreshStreamInProgress = false;
       if (!silent) {
         progressContainer.classList.add('hidden');
         btn.disabled = false;
@@ -1337,7 +1344,10 @@ async function runRefreshStream({ silent = false } = {}) {
         setTimeout(async () => {
           await fetchPRs(true);
           lastRefreshWallMs = Math.round(performance.now() - wallStart);
-          if (silent) lastAutoRefreshAt = Date.now();
+          if (silent) {
+            lastAutoRefreshAt = Date.now();
+            localStorage.setItem('lastAutoRefreshTimestamp', String(lastAutoRefreshAt));
+          }
           renderPerfBar();
           cleanup(true);
         }, 0);
@@ -1375,9 +1385,25 @@ function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   if (!autoRefreshEnabled) return;
   autoRefreshTimer = setInterval(async () => {
+    // Skip if another tab refreshed within the last 25 min
+    const lastShared = parseInt(localStorage.getItem('lastAutoRefreshTimestamp') || '0', 10);
+    if (Date.now() - lastShared < AUTO_REFRESH_INTERVAL_MS - 5 * 60 * 1000) {
+      lastAutoRefreshAt = lastShared;
+      renderPerfBar();
+      return;
+    }
+    localStorage.setItem('lastAutoRefreshTimestamp', String(Date.now()));
     await runRefreshStream({ silent: true });
   }, AUTO_REFRESH_INTERVAL_MS);
 }
+
+// When another tab stamps a refresh, reset our countdown and update the perf bar
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'lastAutoRefreshTimestamp' || !e.newValue) return;
+  lastAutoRefreshAt = parseInt(e.newValue, 10);
+  renderPerfBar();
+  resetAutoRefresh(); // restart our 30-min clock from now
+});
 
 function resetAutoRefresh() {
   startAutoRefresh();
