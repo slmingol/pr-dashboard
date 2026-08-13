@@ -146,10 +146,11 @@ function toggleHidePR(prId, owner, repo, number) {
 
 // Update hidden count badge
 function updateHiddenCount() {
+  const n = Object.keys(hiddenPRs).length;
   const count = document.getElementById('hidden-count');
-  if (count) {
-    count.textContent = Object.keys(hiddenPRs).length;
-  }
+  if (count) count.textContent = n;
+  const btn = document.getElementById('unhide-all-btn');
+  if (btn) btn.classList.toggle('hidden', n === 0);
 }
 
 function unhideAll() {
