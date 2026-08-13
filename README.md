@@ -84,8 +84,9 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 ### Data refresh
 
 - **Refresh Data** -- queries all monitored repositories via 10 concurrent REST requests with ETag caching; typically ~7s for 100+ repos; streams real per-repo progress via SSE
-- **Auto-refresh** -- silently runs a full refresh every 30 minutes while the tab is open; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires
+- **Auto-refresh** -- silently runs a full refresh every 30 minutes while the tab is open; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires; toggle with the `⏱ Auto: ON/OFF` button in the header (state persists in localStorage)
 - **Reload** -- returns the cached PR list instantly (in-memory cache, 5-minute TTL) without hitting GitHub
+- **Resilient caching** -- on 403/429/5xx responses, the server serves the last known PR list from its ETag cache rather than returning empty results; protects against GitHub IP outages and secondary rate limits
 - **Performance bar** -- displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
 
 #### Performance bar fields
@@ -248,6 +249,7 @@ volumes:
 | `theme` | `dark` or `light` |
 | `hiddenPRs` | Object keyed by `"owner/repo#number"` |
 | `watchOnlyRepos` | Object keyed by `"owner/repo"` |
+| `autoRefreshEnabled` | `"true"` or `"false"` (default true) |
 | `diffView` | `unified` or `split` |
 | `filterSearch` | Last search term |
 | `filterState` | Last state filter value |
