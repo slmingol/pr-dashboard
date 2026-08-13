@@ -324,6 +324,20 @@ async function fetchPRs(force = false) {
         showToast(`${unhiddenCount} PR${unhiddenCount > 1 ? 's' : ''} resurfaced — your review was dismissed by new commits`, 'info', 'Re-review Needed', 6000);
       }
 
+      // Alert for visible (non-hidden) PRs where review was dismissed — once per session per PR
+      const alertedDismissed = JSON.parse(sessionStorage.getItem('alertedDismissed') || '{}');
+      const newlyDismissed = allPRs.filter(pr => {
+        const prId = `${pr.repo}#${pr.number}`;
+        return pr.reviewStatus?.allDismissed && !hiddenPRs[prId] && !alertedDismissed[prId];
+      });
+      if (newlyDismissed.length > 0) {
+        newlyDismissed.forEach(pr => { alertedDismissed[`${pr.repo}#${pr.number}`] = true; });
+        sessionStorage.setItem('alertedDismissed', JSON.stringify(alertedDismissed));
+        const titles = newlyDismissed.slice(0, 3).map(pr => `#${pr.number}`).join(', ');
+        const extra = newlyDismissed.length > 3 ? ` +${newlyDismissed.length - 3} more` : '';
+        showToast(`Review dismissed by new commits: ${titles}${extra} — re-review needed`, 'warning', 'Review Dismissed', 8000);
+      }
+
       // Mark new PRs (PRs that weren't in the previous set)
       let newPRCount = 0;
       allPRs.forEach(pr => {
@@ -509,7 +523,7 @@ function renderPRs(prs, showHidden = false) {
               ${pr.isNew ? '<span class="state-badge state-info" title="New since last refresh">✨ NEW</span>' : ''}
               ${isStale ? `<span class="state-badge state-stale" title="${ageDays} days old">STALE</span>` : ''}
               ${pr.mergeableState === 'dirty' ? '<span class="state-badge state-danger" title="This PR has merge conflicts">CONFLICT</span>' : ''}
-              ${pr.ciStatus?.state === 'FAILURE' ? '<span class="state-badge state-danger" title="CI checks are failing">CI FAIL</span>' : pr.ciStatus?.state === 'PENDING' ? '<span class="state-badge state-warning" title="CI checks are in progress">CI ...</span>' : pr.ciStatus?.state === 'SUCCESS' ? '<span class="state-badge state-success" title="All CI checks passed">CI ✓</span>' : ''}
+              ${pr.ciStatus?.state === 'FAILURE' ? '<span class="state-badge state-danger" title="CI checks are failing">CI FAIL</span>' : pr.ciStatus?.state === 'PENDING' ? '<span class="state-badge state-warning" title="CI checks are in progress">CI ...</span>' : pr.ciStatus?.state === 'SUCCESS' ? '<span class="state-badge state-success" title="All CI checks passed">CI ✓</span>' : pr.ciStatus === null && pr.headSha ? '<span class="state-badge state-muted" title="CI status loading — refresh to update">CI ?</span>' : ''}
               ${isHidden ? '<span class="state-badge state-muted">HIDDEN</span>' : ''}
             </div>
             <div class="pr-actions">
