@@ -1,4 +1,4 @@
-.PHONY: up down build prod restart logs shell clean list
+.PHONY: up down build prod restart logs watch shell clean list
 
 # Auto-detect podman or docker
 RUNTIME := $(shell command -v podman 2>/dev/null | xargs basename 2>/dev/null || echo docker)
@@ -21,6 +21,7 @@ list:
 	@printf "  \033[32mdown\033[0m      Stop and remove container\n"
 	@printf "  \033[32mrestart\033[0m   Restart running container\n"
 	@printf "  \033[32mlogs\033[0m      Tail container logs\n"
+	@printf "  \033[32mwatch\033[0m     Tail logs indefinitely (re-attaches on restart)\n"
 	@printf "  \033[32mshell\033[0m     Exec into running container\n"
 	@printf "\n\033[1mProduction\033[0m\n"
 	@printf "  \033[33mbuild\033[0m     Full rebuild without override mounts\n"
@@ -42,6 +43,9 @@ restart:
 
 logs:
 	$(COMPOSE) logs -f
+
+watch:
+	@while true; do $(COMPOSE) logs -f 2>/dev/null; sleep 1; done
 
 shell:
 	$(RUNTIME) exec -it pr-dashboard sh
