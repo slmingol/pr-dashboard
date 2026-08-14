@@ -1172,12 +1172,9 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     if (aborted) return;
 
-    // Fetch REST rate limits (exempt from rate limiting itself)
-    let restRL = null;
-    try {
-      const rl = await githubGet('/rate_limit');
-      if (rl.status === 200) restRL = JSON.parse(rl.body)?.resources?.core ?? null;
-    } catch (_) {}
+    // Rate limit check removed — the REST /rate_limit call was itself triggering
+    // the secondary rate limit circuit breaker after the GraphQL batch succeeded.
+    const restRL = null;
 
     // Guard: don't overwrite a healthy cache with an empty result — GitHub network blip
     if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
