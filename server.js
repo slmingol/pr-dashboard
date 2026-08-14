@@ -291,6 +291,7 @@ async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
 // In-memory PR list cache (avoids re-fetching on every /api/prs hit during a session)
 const prListCache = { prs: null, fetchedAt: 0, rateInfo: null };
 const PR_LIST_TTL = 30 * 60 * 1000;
+const PR_LIST_CACHE_FILE = process.env.PR_LIST_CACHE_FILE || '/data/pr-list-cache.json';
 let prListFetchInFlight = null;   // dedup concurrent PR list fetches
 let reviewBatchInFlight = false;  // guard against concurrent review batches
 
@@ -371,6 +372,7 @@ async function getSubscribedRepos() {
 // ─── Persistent cache ────────────────────────────────────────────────────────
 
 async function loadCacheFromDisk() {
+  // Review cache
   try {
     const content = await fs.readFile(CACHE_FILE, 'utf-8');
     const entries = JSON.parse(content);
@@ -382,7 +384,19 @@ async function loadCacheFromDisk() {
       }
     }
     console.log(`Review cache: loaded ${loaded} valid entries from ${CACHE_FILE}`);
-  } catch (_) { /* cache file missing or corrupt — start fresh */ }
+  } catch (_) { /* missing or corrupt — start fresh */ }
+
+  // PR list cache — prevents GitHub calls immediately after a restart
+  try {
+    const raw = await fs.readFile(PR_LIST_CACHE_FILE, 'utf-8');
+    const saved = JSON.parse(raw);
+    if (saved.prs && saved.fetchedAt && (Date.now() - saved.fetchedAt) < PR_LIST_TTL) {
+      prListCache.prs = saved.prs;
+      prListCache.fetchedAt = saved.fetchedAt;
+      prListCache.rateInfo = saved.rateInfo || null;
+      console.log(`PR list cache: loaded ${saved.prs.length} PRs from ${PR_LIST_CACHE_FILE}`);
+    }
+  } catch (_) { /* missing or corrupt — start fresh */ }
 }
 
 async function saveCacheToDisk() {
@@ -391,6 +405,18 @@ async function saveCacheToDisk() {
     await fs.writeFile(CACHE_FILE, JSON.stringify(entries));
   } catch (err) {
     console.warn('Could not save review cache to disk:', err.message);
+  }
+}
+
+async function savePrListCacheToDisk() {
+  try {
+    await fs.writeFile(PR_LIST_CACHE_FILE, JSON.stringify({
+      prs: prListCache.prs,
+      fetchedAt: prListCache.fetchedAt,
+      rateInfo: prListCache.rateInfo,
+    }));
+  } catch (err) {
+    console.warn('Could not save PR list cache to disk:', err.message);
   }
 }
 
@@ -780,6 +806,7 @@ app.get('/api/prs', async (req, res) => {
         } else {
           prListCache.prs = prs;
           prListCache.fetchedAt = Date.now();
+          savePrListCacheToDisk();
         }
         if (prListCache.rateInfo) {
           prListCache.rateInfo.listHits = result.listHits;
@@ -1074,10 +1101,11 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
       return;
     }
 
-    // Update in-memory cache
+    // Update in-memory cache and persist so restarts don't force an immediate GitHub fetch
     prListCache.prs = prs;
     prListCache.fetchedAt = Date.now();
     prListCache.rateInfo = { listHits, listMisses, rest: restRL, fetchedAt: Date.now() };
+    savePrListCacheToDisk();
 
     // Write ghreport-format file for any external tooling that reads it
     const outputPath = process.env.GHREPORT_OUTPUT;
