@@ -450,9 +450,100 @@ function processReviewData(data, username) {
   return { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
 }
 
-// ─── REST + ETag per-PR review fetch ─────────────────────────────────────────
-// Replaces the GraphQL batch. ETags allow 304 Not Modified responses which cost
-// zero primary rate-limit points when PR/review data is unchanged.
+// ─── GraphQL review batch ─────────────────────────────────────────────────────
+// Fetches PR state, reviews, CI status, and merge state for a batch of PRs in
+// a single GraphQL request. 50 PRs → 1 request instead of 150 REST calls.
+// GraphQL is not subject to the same secondary rate limit as REST.
+
+const GQL_REVIEW_FIELDS = `
+  title isDraft state author { login } createdAt updatedAt
+  reviewDecision headRefOid mergeable
+  reviews(first: 100) { nodes { author { login } state submittedAt } }
+  statusCheckRollup { state }
+`;
+
+async function fetchReviewStatusGraphQL(prs, username) {
+  if (prs.length === 0) return { results: {} };
+
+  const results = {};
+  const batches = [];
+  for (let i = 0; i < prs.length; i += GQL_BATCH_SIZE) {
+    batches.push(prs.slice(i, i + GQL_BATCH_SIZE));
+  }
+
+  for (const batch of batches) {
+    const query = '{ ' + batch.map((pr, i) => {
+      const [owner, name] = pr.repo.split('/');
+      return `r${i}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+        pullRequest(number: ${pr.number}) { ${GQL_REVIEW_FIELDS} }
+      }`;
+    }).join('\n') + ' }';
+
+    let gqlData = null;
+    try {
+      const res = await githubPost('/graphql', { query });
+      if (res.status === 200) {
+        const parsed = JSON.parse(res.body);
+        if (parsed.data) gqlData = parsed.data;
+        if (parsed.errors) console.warn('Review GraphQL errors:', parsed.errors.map(e => e.message).join('; '));
+      } else {
+        console.warn(`Review GraphQL batch HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.warn('Review GraphQL batch error:', err.message);
+    }
+
+    for (let i = 0; i < batch.length; i++) {
+      const pr = batch[i];
+      const key = `${pr.repo}#${pr.number}`;
+      const prData = gqlData?.[`r${i}`]?.pullRequest;
+      if (!prData) continue;
+
+      const rawReviews = prData.reviews?.nodes || [];
+      const allUserReviews = rawReviews.filter(r => r.author?.login === username);
+      const activeReviews = allUserReviews
+        .filter(r => r.state !== 'DISMISSED')
+        .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+      const ciRaw = prData.statusCheckRollup?.state;
+      const ciStatus = ciRaw
+        ? { state: (ciRaw === 'SUCCESS') ? 'SUCCESS' : (ciRaw === 'FAILURE' || ciRaw === 'ERROR') ? 'FAILURE' : 'PENDING' }
+        : null;
+
+      const mergeableMap = { MERGEABLE: 'clean', CONFLICTING: 'dirty', UNKNOWN: 'unknown' };
+      const prMeta = {
+        title: prData.title,
+        author: prData.author,
+        state: prData.state === 'MERGED' ? 'MERGED' : prData.state === 'CLOSED' ? 'CLOSED' : 'OPEN',
+        reviewDecision: prData.reviewDecision || null,
+        isDraft: prData.isDraft || false,
+        createdAt: prData.createdAt || null,
+        mergeableState: mergeableMap[prData.mergeable] || null,
+        ciStatus,
+      };
+
+      let status;
+      if (activeReviews.length > 0) {
+        const latest = activeReviews[0];
+        status = { hasReviewed: true, state: latest.state, submittedAt: latest.submittedAt, updatedAt: prData.updatedAt, prMeta };
+      } else if (allUserReviews.length > 0) {
+        status = { hasReviewed: false, updatedAt: prData.updatedAt, allDismissed: true, prMeta };
+      } else {
+        status = { hasReviewed: false, updatedAt: prData.updatedAt, prMeta };
+      }
+
+      reviewCache.set(key, { status, timestamp: Date.now() });
+      results[key] = status;
+    }
+  }
+
+  const fetched = Object.keys(results).length;
+  const errors = prs.length - fetched;
+  console.log(`GraphQL reviews: ${fetched} fetched, ${errors} errors — ${prs.length} misses total`);
+  return { results };
+}
+
+// ─── REST + ETag per-PR review fetch (kept as fallback) ───────────────────────
 
 async function fetchReviewStatusRest(prs, username) {
   if (prs.length === 0) return { results: {}, restErrors: new Set() };
@@ -847,14 +938,14 @@ app.get('/api/prs', async (req, res) => {
       const missesToFetch = misses.slice(0, MAX_REVIEW_BATCH);
       console.log(`Review cache: ${hitCount} hits, ${missCount} misses (fetching ${missesToFetch.length})`);
 
-      // Fetch misses via REST+ETag (parallel, concurrency-limited)
-      // Skip if another review batch is already running — serve stale cache for this request
+      // Fetch misses via GraphQL batch — 20 PRs → 1 request instead of 60 REST calls.
+      // Skip if another batch is already running — serve stale cache for this request.
       const ghFetchStart = Date.now();
-      let restErrors = new Set();
+      let gqlResults = {};
       if (missesToFetch.length > 0 && !reviewBatchInFlight) {
         reviewBatchInFlight = true;
         try {
-          ({ restErrors } = await fetchReviewStatusRest(missesToFetch, currentUser));
+          ({ results: gqlResults } = await fetchReviewStatusGraphQL(missesToFetch, currentUser));
           ghFetchMs = Date.now() - ghFetchStart;
         } finally {
           reviewBatchInFlight = false;
@@ -863,18 +954,14 @@ app.get('/api/prs', async (req, res) => {
         console.log(`Review batch already in flight — serving cached data for ${missesToFetch.length} misses`);
       }
 
-      // Rebuild hits from cache (REST fetch updated it for both 200 and 304 cases).
-      // Skip REST-failed keys — they need the gh pr view fallback for fresh data,
-      // not a potentially stale cache entry that would hide the true review state.
+      // GraphQL results go directly into hits; anything not returned falls through to gh fallback.
       for (const pr of missesToFetch) {
         const key = `${pr.repo}#${pr.number}`;
-        if (restErrors.has(key)) continue;
-        const cached = reviewCache.get(key);
-        if (cached?.status) hits[key] = { ...cached.status, cachedAt: cached.timestamp };
+        if (gqlResults[key]) hits[key] = { ...gqlResults[key], cachedAt: Date.now() };
       }
 
-      // For anything still not resolved (no REST result and no cache): fall back to
-      // gh pr view which goes through the gh CLI and bypasses direct-HTTPS issues.
+      // For anything GraphQL didn't return (repo not found, partial error, etc.)
+      // fall back to gh pr view which uses the gh CLI.
       const stillMissing = missesToFetch.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
         console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
