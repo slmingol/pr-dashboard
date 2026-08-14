@@ -115,15 +115,16 @@ function githubPost(apiPath, body) {
         let data = '';
         res.on('data', chunk => { data += chunk; });
         res.on('end', () => {
+          // GraphQL 403s do NOT trigger the REST circuit breaker — GraphQL and REST
+          // are independent; blocking REST for GraphQL failures would break the diff
+          // endpoint unnecessarily. Log only.
           if (res.statusCode === 403) {
             try {
               const parsed = JSON.parse(data);
               if (parsed.message && parsed.message.includes('rate limit exceeded for user ID')) {
-                recordSecondaryRateLimit();
+                console.warn(`GitHub secondary rate limit on GraphQL — not blocking REST circuit breaker`);
               }
             } catch (_) {}
-          } else if (res.statusCode === 200) {
-            resetGithubBackoff();
           }
           resolve({ status: res.statusCode, body: data });
         });
