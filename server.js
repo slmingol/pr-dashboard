@@ -1039,7 +1039,9 @@ app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
       `/repos/${owner}/${repo}/pulls/${number}`,
       { Accept: 'application/vnd.github.diff' }
     );
-    if (result.status === 429) return res.status(429).json({ success: false, error: result.body });
+    if (result.status === 429 || (result.status === 403 && result.body && result.body.includes('rate limit'))) {
+      return res.status(429).json({ success: false, error: 'GitHub secondary rate limit — wait a few minutes and try again' });
+    }
     if (result.status !== 200) return res.status(result.status).json({ success: false, error: `GitHub returned ${result.status}` });
     res.json({ success: true, diff: result.body });
   } catch (error) {
