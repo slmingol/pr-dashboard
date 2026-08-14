@@ -318,22 +318,23 @@ async function getCurrentUser() {
   if (_cachedUserAt > 0 && age < (_cachedUserFailed ? 35 * 60 * 1000 : 10 * 60 * 1000)) {
     return _cachedUser;
   }
-  // Try REST API first
-  try {
-    const res = await githubGet('/user');
-    if (res.status === 200) {
-      _cachedUser = JSON.parse(res.body).login;
-      _cachedUserFailed = false;
-      _cachedUserAt = Date.now();
-      return _cachedUser;
-    }
-  } catch (_) {}
-  // Fall back to local gh config — no API call, works even when rate limited
+  // gh config requires no API call — use it first to avoid burning a REST request
+  // (which can trigger the secondary rate limit circuit breaker on cold start)
   try {
     const { stdout } = await execAsync('gh config get -h github.com user');
     const login = stdout.trim();
     if (login) {
       _cachedUser = login;
+      _cachedUserFailed = false;
+      _cachedUserAt = Date.now();
+      return _cachedUser;
+    }
+  } catch (_) {}
+  // Fall back to REST only if gh config is unavailable
+  try {
+    const res = await githubGet('/user');
+    if (res.status === 200) {
+      _cachedUser = JSON.parse(res.body).login;
       _cachedUserFailed = false;
       _cachedUserAt = Date.now();
       return _cachedUser;
