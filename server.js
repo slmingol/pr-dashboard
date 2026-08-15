@@ -1041,7 +1041,13 @@ app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
       { Accept: 'application/vnd.github.diff' }
     );
     if (result.status === 429 || (result.status === 403 && result.body && result.body.includes('rate limit'))) {
-      return res.status(429).json({ success: false, error: 'GitHub secondary rate limit — wait a few minutes and try again' });
+      // REST is rate-limited — fall back to gh CLI which may use a different bucket
+      try {
+        const { stdout } = await execAsync(`gh pr diff ${number} --repo ${owner}/${repo}`, { timeout: 15000 });
+        return res.json({ success: true, diff: stdout });
+      } catch (_) {
+        return res.status(429).json({ success: false, error: 'GitHub secondary rate limit — wait a few minutes and try again' });
+      }
     }
     if (result.status !== 200) return res.status(result.status).json({ success: false, error: `GitHub returned ${result.status}` });
     res.json({ success: true, diff: result.body });
