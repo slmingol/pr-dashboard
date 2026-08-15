@@ -2,7 +2,7 @@
   <img src="docs/banner.svg" alt="PR Dashboard" width="900"/>
 </p>
 
-A containerized pull request dashboard that queries GitHub via GraphQL (PR list) and REST (review status, CI checks, merge state) to provide a consolidated view of all monitored PRs with review tracking, metrics, and management features.
+A containerized pull request dashboard that queries GitHub via GraphQL (PR list and review status) and git smart-HTTP (diffs) to provide a consolidated view of all monitored PRs with review tracking, metrics, and management features.
 
 ## Screenshots
 
@@ -63,7 +63,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 - **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage; **Unhide All** button in the filter bar clears all hidden PRs at once
 - **Watch-only repos** -- mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal
 - **Repo management** -- add or remove watched repos directly from the UI without editing config files
-- **Team member highlighting** -- PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 10 minutes
+- **Team member highlighting** -- PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 60 minutes
 - **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, draft status, merge conflicts, or CI failures
 - **CI/CD status indicators** -- per-PR badges for CI FAIL / CI ... / CI ✓ derived from GitHub check-runs; "CI Failures Only" filter to isolate broken PRs
 - **Merge conflict detection** -- CONFLICT badge on PRs with `mergeable_state: dirty`; "Conflicts Only" filter; state refreshed on every review status poll
@@ -87,7 +87,7 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 ### Data refresh
 
-- **Refresh Data** -- queries all monitored repositories via 10 concurrent REST requests with ETag caching; typically ~7s for 100+ repos; streams real per-repo progress via SSE
+- **Refresh Data** -- queries all monitored repositories via batched GraphQL (50 repos/query); typically ~7s for 100+ repos; streams real per-repo progress via SSE
 - **Auto-refresh** -- silently runs a full refresh every 30 minutes while the tab is open; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires; toggle with the `⏱ Auto: ON/OFF` button in the header (state persists in localStorage)
 - **Reload** -- returns the cached PR list instantly (in-memory cache, 30-minute TTL matching the auto-refresh interval) without hitting GitHub
 - **Resilient caching** -- on 403/429/5xx responses, the server serves the last known PR list from its ETag cache rather than returning empty results; protects against GitHub IP outages and secondary rate limits
@@ -102,7 +102,7 @@ refresh: 15.4s · GH: 11.3s · avg: 4.3s · 0/135 cached · 122/126 repos cached
 | Field | What it measures |
 |---|---|
 | `refresh: Xs` | Wall-clock time for the complete Refresh Data cycle — from button click to dashboard update |
-| `GH: Xs` | Time spent fetching review statuses from GitHub REST API for PRs not in the local review cache. Only shown when at least one PR was a cache miss. |
+| `GH: Xs` | Time spent fetching review statuses from GitHub GraphQL for PRs not in the local review cache. Only shown when at least one PR was a cache miss. |
 | `avg: Xs` | Rolling average of the last 10 GH review fetch durations |
 | `N/M cached` | Review status cache: N PRs had a valid cached status (no GitHub call); M is total PRs. 304 Not Modified responses keep the cached value at zero quota cost. |
 | `N/M repos cached` | PR list ETag cache: N repos returned 304 Not Modified (unchanged since last refresh, zero quota cost); M is total watched repos |
@@ -279,10 +279,9 @@ volumes:
 ```
 browser SSE connect → /api/refresh-ghreport-stream
   → read subscribedRepos from config.yaml (or env)
-  → fetchAllOpenPRsFromGitHub: pLimit(10) concurrent GraphQL queries
-      each query: { rateLimit { cost remaining } repository { pullRequests { ... } } }
-  → fetch /rate_limit REST endpoint for REST quota snapshot
-  → store results in prListCache (in-memory, 30-min TTL)
+  → fetchAllOpenPRsFromGitHub: batched GraphQL (50 repos/query, ~3 queries for 127 repos)
+      each query: { repository { pullRequests(states: OPEN, first: 100) { ... } } }
+  → store results in prListCache (in-memory + /data/pr-list-cache.json, 30-min TTL)
   → report real per-repo progress events back to browser (~7s for 126 repos)
 ```
 
@@ -292,21 +291,24 @@ browser SSE connect → /api/refresh-ghreport-stream
 browser GET /api/prs
   → if prListCache is fresh: return cached PR list instantly
   → else: fetchAllOpenPRsFromGitHub directly, populate cache
-  → fetch review status for each PR via REST+ETag (parallel, concurrency-limited)
-      cache hits (304 Not Modified) skip network round-trip
+  → fetch review status for cache-miss PRs via batched GraphQL (50 PRs/query, max 20/call)
+      cache hits skip network round-trip entirely
   → return PRs + review statuses + perf metadata (timing, cache ratio, rate limits)
 ```
 
-**Review operations** (approve / request-changes / comment / diff / checkout) continue to use `gh` CLI subprocesses, which handle auth, branch operations, and other stateful interactions that benefit from the CLI's built-in safety checks.
+**Diff** uses git smart-HTTP (`git fetch refs/pull/N/merge --depth=2 --filter=blob:none`) into per-repo bare cache dirs under `/data/diff-cache/`. Git protocol is a separate GitHub service with its own rate limit, unaffected by REST API bans. Repeat views are incremental fetches.
+
+**Review operations** (approve / request-changes / comment / checkout) use `gh` CLI subprocesses.
 
 ### Caching layers
 
 | Layer | TTL | Purpose |
 |-------|-----|---------|
-| `prListCache` | 30 min | In-memory PR list; avoids re-fetching GitHub on every Reload; TTL matches auto-refresh interval |
-| `reviewCache` | 5 min | Per-PR review status; invalidated immediately on your own review actions |
-| REST ETags | server-driven | GitHub returns 304 for unchanged PR review state; saves quota |
-| `_cachedUser` | 10 min (success) / 35 min (failure) | Authenticated GitHub username; longer failure TTL outlasts the 30-min auto-refresh to prevent rate-limit cascades |
+| `prListCache` | 30 min | In-memory + `/data/pr-list-cache.json`; survives restarts; TTL matches auto-refresh interval |
+| `reviewCache` | 30 min | Per-PR review status; persisted to `/data/review-cache.json`; invalidated immediately on your own review actions |
+| `diff-cache` | persistent | Per-repo bare git repos under `/data/diff-cache/`; repeat diff views are incremental fetches |
+| `_cachedUser` | 10 min (success) / 35 min (failure) | Authenticated GitHub username; longer failure TTL outlasts the 30-min auto-refresh |
+| REST circuit breaker | until `x-ratelimit-reset` + 5 min | Persisted to `/data/gh-backoff.json`; survives restarts; blocks REST calls until GitHub's rate limit window clears |
 
 ### API endpoints
 
@@ -314,7 +316,7 @@ browser GET /api/prs
 |--------|------|-------------|
 | GET | `/api/prs` | All PRs with review status and perf metadata |
 | GET | `/api/user` | Current authenticated GitHub user |
-| GET | `/api/team-members` | Members of the configured GitHub team (10-min cache) |
+| GET | `/api/team-members` | Members of the configured GitHub team (60-min cache) |
 | GET | `/api/pr-template/:owner/:repo` | PR template content for a repo (1-hour cache; returns `null` if none) |
 | GET | `/api/repos` | Subscribed repo list |
 | POST | `/api/repos` | Add a repo (`{ repo: "owner/name" }`) to config.yaml |

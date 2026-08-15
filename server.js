@@ -2,6 +2,7 @@ const express = require('express');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const https = require('https');
 
@@ -24,19 +25,40 @@ function pLimit(concurrency) {
 }
 
 // GitHub REST API GET with ETag support (GraphQL endpoint does not support ETags)
-// Secondary rate limit circuit breaker
+// Secondary rate limit circuit breaker — persisted to disk so restarts don't clear it
+const BACKOFF_FILE = process.env.BACKOFF_FILE || '/data/gh-backoff.json';
 let _ghBackoffUntil = 0;
 let _ghBackoffMs = 60 * 1000; // starts at 60s, doubles each hit, caps at 30min
 const GH_BACKOFF_MAX = 30 * 60 * 1000;
 
-function recordSecondaryRateLimit() {
-  _ghBackoffUntil = Date.now() + _ghBackoffMs;
-  console.warn(`GitHub secondary rate limit hit — backing off ${_ghBackoffMs / 1000}s until ${new Date(_ghBackoffUntil).toISOString()}`);
+try {
+  const saved = JSON.parse(fsSync.readFileSync(BACKOFF_FILE, 'utf8'));
+  if (saved.backoffUntil > Date.now()) {
+    _ghBackoffUntil = saved.backoffUntil;
+    _ghBackoffMs = saved.backoffMs || 60 * 1000;
+    console.warn(`Loaded rate limit backoff from disk — paused until ${new Date(_ghBackoffUntil).toISOString()}`);
+  }
+} catch (_) {}
+
+function saveBackoffToDisk() {
+  try { fsSync.writeFileSync(BACKOFF_FILE, JSON.stringify({ backoffUntil: _ghBackoffUntil, backoffMs: _ghBackoffMs })); } catch (_) {}
+}
+
+function recordSecondaryRateLimit(resetHeader) {
+  // Add 5-minute buffer beyond GitHub's stated reset so concurrent calls at the reset
+  // boundary don't all slip through before the new backoff is set.
+  const resetMs = resetHeader ? (parseInt(resetHeader) * 1000 + 5 * 60 * 1000) : 0;
+  const localUntil = Date.now() + _ghBackoffMs;
+  _ghBackoffUntil = Math.max(resetMs, localUntil);
+  const backoffSec = Math.ceil((_ghBackoffUntil - Date.now()) / 1000);
+  console.warn(`GitHub rate limit hit — backing off ${backoffSec}s until ${new Date(_ghBackoffUntil).toISOString()}`);
   _ghBackoffMs = Math.min(_ghBackoffMs * 2, GH_BACKOFF_MAX);
+  saveBackoffToDisk();
 }
 
 function resetGithubBackoff() {
   _ghBackoffMs = 60 * 1000;
+  saveBackoffToDisk();
 }
 
 function githubGet(apiPath, extraHeaders = {}) {
@@ -67,7 +89,7 @@ function githubGet(apiPath, extraHeaders = {}) {
             try {
               const parsed = JSON.parse(body);
               if (parsed.message && parsed.message.includes('rate limit exceeded for user ID')) {
-                recordSecondaryRateLimit();
+                recordSecondaryRateLimit(res.headers['x-ratelimit-reset']);
               }
             } catch (_) {}
           } else if (res.statusCode === 200) {
@@ -122,7 +144,7 @@ function githubPost(apiPath, body) {
             try {
               const parsed = JSON.parse(data);
               if (parsed.message && parsed.message.includes('rate limit exceeded for user ID')) {
-                console.warn(`GitHub secondary rate limit on GraphQL — not blocking REST circuit breaker`);
+                recordSecondaryRateLimit(res.headers['x-ratelimit-reset']);
               }
             } catch (_) {}
           }
@@ -460,7 +482,7 @@ function processReviewData(data, username) {
 const GQL_REVIEW_FIELDS = `
   title isDraft state author { login } createdAt updatedAt
   reviewDecision headRefOid mergeable
-  reviews(first: 100) { nodes { author { login } state submittedAt } }
+  reviews(last: 10) { nodes { author { login } state submittedAt } }
   statusCheckRollup { state }
 `;
 
@@ -677,10 +699,10 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
   try {
     const { stdout } = await execAsync(
       `gh pr view ${number} --repo ${owner}/${repo} --json reviews,updatedAt,title,author,state,reviewDecision,isDraft`,
-      { timeout: 10000 } // 10 second timeout
+      { timeout: 10000 }
     );
     const data = JSON.parse(stdout);
-    
+
     let result;
     
     if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
@@ -818,7 +840,7 @@ const TEAM_SLUG = 'band-platform-paas';
 
 app.get('/api/team-members', async (req, res) => {
   try {
-    if (_cachedTeamMembers && (Date.now() - _cachedTeamMembersAt) < 10 * 60 * 1000) {
+    if (_cachedTeamMembers && (Date.now() - _cachedTeamMembersAt) < 60 * 60 * 1000) {
       return res.json({ success: true, members: _cachedTeamMembers });
     }
     const r = await githubGet(`/orgs/${TEAM_ORG}/teams/${TEAM_SLUG}/members`);
@@ -1033,25 +1055,62 @@ app.get('/api/pr/:owner/:repo/:number', async (req, res) => {
   }
 });
 
+// Fetch PR diff via git smart-HTTP (separate service from REST API — not affected by
+// the REST rate limit ban on user 15072). Uses per-repo bare cache dirs so repeat
+// views are incremental fetches rather than full clones.
+async function fetchDiffViaGit(owner, repo, number) {
+  const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  const cacheDir = `/data/diff-cache/${owner}__${repo}`;
+  const remote = `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+
+  // Init bare repo with named remote (required for lazy blob promisor fetch)
+  try { await execAsync(`git -C "${cacheDir}" rev-parse`); } catch (_) {
+    await execAsync(`git init -q --bare "${cacheDir}"`);
+    await execAsync(`git -C "${cacheDir}" remote add origin "${remote}"`);
+  }
+
+  // Try merge ref first (works for non-conflicting open PRs)
+  try {
+    await execAsync(
+      `git -C "${cacheDir}" fetch -q --depth=2 --filter=blob:none origin "refs/pull/${number}/merge"`,
+      { timeout: 30000 }
+    );
+    const { stdout } = await execAsync(
+      `git -C "${cacheDir}" diff FETCH_HEAD~1 FETCH_HEAD`,
+      { timeout: 30000, maxBuffer: 20 * 1024 * 1024 }
+    );
+    return stdout;
+  } catch (_) {}
+
+  // Fallback: fetch head + base, compute merge-base diff
+  const { stdout: prJson } = await execAsync(
+    `gh pr view ${number} --repo ${owner}/${repo} --json baseRefName,headRefOid`,
+    { timeout: 15000 }
+  );
+  const { baseRefName, headRefOid } = JSON.parse(prJson);
+  await execAsync(
+    `git -C "${cacheDir}" fetch -q --filter=blob:none origin "refs/pull/${number}/head:refs/pr/${number}" "refs/heads/${baseRefName}:refs/base/${baseRefName}"`,
+    { timeout: 30000 }
+  );
+  const { stdout: mbOut } = await execAsync(
+    `git -C "${cacheDir}" merge-base "refs/base/${baseRefName}" "refs/pr/${number}"`,
+    { timeout: 10000 }
+  );
+  const mergeBase = mbOut.trim();
+  const { stdout } = await execAsync(
+    `git -C "${cacheDir}" diff "${mergeBase}" "refs/pr/${number}"`,
+    { timeout: 30000, maxBuffer: 20 * 1024 * 1024 }
+  );
+  return stdout;
+}
+
 app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
   try {
     const { owner, repo, number } = req.params;
-    const result = await githubGet(
-      `/repos/${owner}/${repo}/pulls/${number}`,
-      { Accept: 'application/vnd.github.diff' }
-    );
-    if (result.status === 429 || (result.status === 403 && result.body && result.body.includes('rate limit'))) {
-      // REST is rate-limited — fall back to gh CLI which may use a different bucket
-      try {
-        const { stdout } = await execAsync(`gh pr diff ${number} --repo ${owner}/${repo}`, { timeout: 15000 });
-        return res.json({ success: true, diff: stdout });
-      } catch (_) {
-        return res.status(429).json({ success: false, error: 'GitHub secondary rate limit — wait a few minutes and try again' });
-      }
-    }
-    if (result.status !== 200) return res.status(result.status).json({ success: false, error: `GitHub returned ${result.status}` });
-    res.json({ success: true, diff: result.body });
+    const diff = await fetchDiffViaGit(owner, repo, number);
+    res.json({ success: true, diff });
   } catch (error) {
+    console.error(`Diff fetch failed for ${owner}/${repo}#${number}:`, error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
