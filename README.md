@@ -296,7 +296,7 @@ browser GET /api/prs
   → return PRs + review statuses + perf metadata (timing, cache ratio, rate limits)
 ```
 
-**Diff** uses git smart-HTTP (`git fetch refs/pull/N/merge --depth=2 --filter=blob:none`) into per-repo bare cache dirs under `/data/diff-cache/`. Git protocol is a separate GitHub service with its own rate limit, unaffected by REST API bans. Repeat views are incremental fetches.
+**Diff** uses git smart-HTTP rather than the REST API. Git smart-HTTP is git's native wire protocol tunneled over HTTPS — it talks to `github.com/{owner}/{repo}.git` (the git server), not `api.github.com` (the REST API). These are separate GitHub services with independent rate limits; a REST API ban does not affect git protocol traffic. The server fetches `refs/pull/N/merge` with `--depth=2 --filter=blob:none` (only the merge commit and changed blobs), diffs `FETCH_HEAD~1..FETCH_HEAD`, and caches the resulting bare repo under `/data/diff-cache/` so repeat views are incremental. Falls back to a head+base merge-base diff for conflicting PRs where no merge ref exists.
 
 **Review operations** (approve / request-changes / comment / checkout) use `gh` CLI subprocesses.
 
