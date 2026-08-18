@@ -902,13 +902,15 @@ app.get('/api/prs', async (req, res) => {
     let prs;
     const forceReviewRefresh = req.query.force === '1';
 
-    // Prefer in-memory cache (populated by the SSE refresh)
-    if (prListCache.prs && (Date.now() - prListCache.fetchedAt) < PR_LIST_TTL) {
+    // Prefer in-memory cache (populated by the SSE refresh).
+    // Serve stale cache rather than auto-fetching — only Refresh Data (SSE) should
+    // pull fresh data from GitHub. This keeps /api/prs silent when Auto is off.
+    if (prListCache.prs) {
       prs = prListCache.prs;
     } else {
       const { repos } = await getSubscribedRepos();
       if (repos.length > 0) {
-        // Dedup: if a fetch is already running, wait for it rather than launching another
+        // No cache at all (cold start) — fetch once to populate
         if (!prListFetchInFlight) {
           prListFetchInFlight = fetchAllOpenPRsFromGitHub(repos, null)
             .finally(() => { prListFetchInFlight = null; });

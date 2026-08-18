@@ -18,7 +18,13 @@
           <button id="analytics-btn" class="btn btn-muted" title="Analytics panel">📊</button>
           <button id="keyboard-help-btn" class="btn btn-muted" title="Keyboard shortcuts (?)">⌨</button>
           <button id="theme-toggle" class="btn btn-muted" title="Toggle theme">🌙</button>
-          <button id="auto-refresh-toggle" class="btn btn-muted" title="Toggle 30-minute auto-refresh">⏱ Auto: ON</button>
+          <select id="auto-refresh-interval" title="Auto-refresh interval">
+            <option value="30">30min</option>
+            <option value="60">60min</option>
+            <option value="90">90min</option>
+            <option value="120">120min</option>
+          </select>
+          <button id="auto-refresh-toggle" class="btn btn-muted" title="Toggle auto-refresh">⏱ Auto: ON</button>
           <button id="refresh-ghreport-btn" class="btn btn-success" title="Run ghreport to fetch latest PRs">🔄 Refresh Data</button>
           <button id="refresh-btn" class="btn btn-primary" title="Reload PR list from file">↻ Reload</button>
         </div>

@@ -88,6 +88,21 @@ header {
   align-items: center;
 }
 
+#auto-refresh-interval {
+  background: var(--btn-bg);
+  color: var(--btn);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+#auto-refresh-interval:hover {
+  background: var(--btn-bg-hover);
+  color: var(--btn-hover);
+}
+
 h1 {
   font-size: 2rem;
   font-weight: 700;

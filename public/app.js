@@ -9,7 +9,10 @@ let lastRefreshWallMs = null;
 let lastPerfData = null;
 let autoRefreshTimer = null;
 let lastAutoRefreshAt = null;
-const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+const AUTO_REFRESH_INTERVALS = [30, 60, 90, 120];
+let autoRefreshIntervalMin = parseInt(localStorage.getItem('autoRefreshIntervalMin') || '30', 10);
+if (!AUTO_REFRESH_INTERVALS.includes(autoRefreshIntervalMin)) autoRefreshIntervalMin = 30;
+let AUTO_REFRESH_INTERVAL_MS = autoRefreshIntervalMin * 60 * 1000;
 let refreshStreamInProgress = false;
 let teamMembers = new Set();
 
@@ -1379,7 +1382,9 @@ function updateAutoRefreshBtn() {
   if (!btn) return;
   btn.textContent = `⏱ Auto: ${autoRefreshEnabled ? 'ON' : 'OFF'}`;
   btn.className = `btn ${autoRefreshEnabled ? 'btn-muted' : 'btn-warning'}`;
-  btn.title = autoRefreshEnabled ? 'Auto-refresh ON — click to disable' : 'Auto-refresh OFF — click to enable';
+  btn.title = autoRefreshEnabled ? `Auto-refresh ON (${autoRefreshIntervalMin}min) — click to disable` : 'Auto-refresh OFF — click to enable';
+  const sel = document.getElementById('auto-refresh-interval');
+  if (sel) sel.value = String(autoRefreshIntervalMin);
 }
 
 function startAutoRefresh() {
@@ -1415,7 +1420,7 @@ function toggleAutoRefresh() {
   localStorage.setItem('autoRefreshEnabled', autoRefreshEnabled);
   if (autoRefreshEnabled) {
     startAutoRefresh();
-    showToast('Auto-refresh enabled (30 min)', 'success', '', 2000);
+    showToast(`Auto-refresh enabled (${autoRefreshIntervalMin}min)`, 'success', '', 2000);
   } else {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
@@ -1592,6 +1597,14 @@ document.getElementById('perf-bar').addEventListener('click', () => { if (lastPe
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('refresh-ghreport-btn').addEventListener('click', refreshGhReport);
 document.getElementById('auto-refresh-toggle').addEventListener('click', toggleAutoRefresh);
+document.getElementById('auto-refresh-interval').addEventListener('change', (e) => {
+  autoRefreshIntervalMin = parseInt(e.target.value, 10);
+  AUTO_REFRESH_INTERVAL_MS = autoRefreshIntervalMin * 60 * 1000;
+  localStorage.setItem('autoRefreshIntervalMin', String(autoRefreshIntervalMin));
+  updateAutoRefreshBtn();
+  if (autoRefreshEnabled) startAutoRefresh();
+  showToast(`Auto-refresh interval: ${autoRefreshIntervalMin}min`, 'success', '', 2000);
+});
 document.getElementById('refresh-btn').addEventListener('click', () => fetchPRs(true));
 document.getElementById('search').addEventListener('input', filterAndRenderPRs);
 document.getElementById('state-filter').addEventListener('change', filterAndRenderPRs);
