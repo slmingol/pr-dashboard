@@ -1013,6 +1013,23 @@ async function addComment(owner, repo, number) {
 }
 
 // Review PR
+// Optimistically update a PR's review badge before the server round-trip completes.
+// The background fetchPRs() will reconcile with actual server state on completion.
+function applyOptimisticReview(owner, repo, number, action) {
+  const key = `${owner}/${repo}`;
+  const num = parseInt(number, 10);
+  const pr = allPRs.find(p => p.repo === key && p.number === num);
+  if (!pr) return;
+  const stateMap = { approve: 'APPROVED', 'request-changes': 'CHANGES_REQUESTED', comment: 'COMMENTED' };
+  pr.reviewStatus = {
+    ...(pr.reviewStatus || {}),
+    hasReviewed: action !== 'comment' ? true : (pr.reviewStatus?.hasReviewed || false),
+    state: stateMap[action] || pr.reviewStatus?.state,
+    submittedAt: new Date().toISOString(),
+  };
+  filterAndRenderPRs();
+}
+
 async function reviewPR(owner, repo, number, action) {
   const actionText = action === 'approve' ? 'Approve' : 'Request Changes';
   const required = action === 'request-changes';
@@ -1030,6 +1047,9 @@ async function reviewPR(owner, repo, number, action) {
     return; // User cancelled
   }
   
+  applyOptimisticReview(owner, repo, number, action);
+  hideCommentModal();
+
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
       method: 'POST',
@@ -1037,19 +1057,17 @@ async function reviewPR(owner, repo, number, action) {
       body: JSON.stringify({ action, body: comment || undefined })
     });
     const data = await response.json();
-    
+
     if (data.success) {
-      hideCommentModal();
       showToast('Review submitted successfully', 'success');
-      // Wait a moment for GitHub API to update, then refresh
       setTimeout(() => fetchPRs(), 1000);
     } else {
-      hideCommentModal();
       showToast('Failed to submit review: ' + data.error, 'error');
+      setTimeout(() => fetchPRs(), 500); // reconcile on failure too
     }
   } catch (error) {
-    hideCommentModal();
     showToast('Error: ' + error.message, 'error');
+    setTimeout(() => fetchPRs(), 500);
   }
 }
 
@@ -1057,6 +1075,9 @@ async function reviewPR(owner, repo, number, action) {
 async function approvePRFromDiff(owner, repo, number) {
   console.log(`Starting approval for ${owner}/${repo}#${number}`);
   
+  applyOptimisticReview(owner, repo, number, 'approve');
+  hideModal();
+
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
       method: 'POST',
@@ -1064,25 +1085,17 @@ async function approvePRFromDiff(owner, repo, number) {
       body: JSON.stringify({ action: 'approve' })
     });
     const data = await response.json();
-    
-    console.log('Review response:', data);
-    
+
     if (data.success) {
-      console.log('Closing modal');
-      hideModal(); // Close diff modal
-      // Small delay to ensure modal is fully closed before showing toast
-      setTimeout(() => {
-        showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
-        // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(), 1000);
-      }, 50);
+      showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
+      setTimeout(() => fetchPRs(), 1000);
     } else {
-      console.error('Review failed:', data.error);
       showToast('Failed to approve: ' + data.error, 'error');
+      setTimeout(() => fetchPRs(), 500);
     }
   } catch (error) {
-    console.error('Review error:', error);
     showToast('Error: ' + error.message, 'error');
+    setTimeout(() => fetchPRs(), 500);
   }
 }
 
@@ -1102,8 +1115,10 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
     return; // User cancelled
   }
   
-  console.log(`Comment provided: "${comment}"`);
-  
+  applyOptimisticReview(owner, repo, number, 'approve');
+  hideCommentModal();
+  hideModal();
+
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/review`, {
       method: 'POST',
@@ -1111,26 +1126,15 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
       body: JSON.stringify({ action: 'approve', body: comment || undefined })
     });
     const data = await response.json();
-    
-    console.log('Review response:', data);
-    
+
     if (data.success) {
-      console.log('Closing modals');
-      hideCommentModal(); // Close comment modal
-      hideModal(); // Close diff modal
-      // Small delay to ensure modals are fully closed before showing toast
-      setTimeout(() => {
-        showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
-        // Wait for GitHub API to update, then refresh
-        setTimeout(() => fetchPRs(), 1000);
-      }, 50);
+      showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
+      setTimeout(() => fetchPRs(), 1000);
     } else {
-      console.error('Review failed:', data.error);
-      hideCommentModal();
       showToast('Failed to approve: ' + data.error, 'error');
+      setTimeout(() => fetchPRs(), 500);
     }
   } catch (error) {
-    console.error('Review error:', error);
     hideCommentModal();
     showToast('Error: ' + error.message, 'error');
   }
