@@ -1107,8 +1107,8 @@ async function fetchDiffViaGit(owner, repo, number) {
 }
 
 app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
+  const { owner, repo, number } = req.params;
   try {
-    const { owner, repo, number } = req.params;
     const diff = await fetchDiffViaGit(owner, repo, number);
     res.json({ success: true, diff });
   } catch (error) {
