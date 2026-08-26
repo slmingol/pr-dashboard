@@ -456,9 +456,6 @@ h1 {
   background: rgba(232, 124, 115, 0.2);
 }
 
-#hidden-count::before, #draft-count::before { content: ' ('; }
-#hidden-count::after, #draft-count::after { content: ')'; }
-
 .loading, .error {
   text-align: center;
   padding: 2rem;
