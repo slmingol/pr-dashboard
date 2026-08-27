@@ -25,6 +25,9 @@ function pLimit(concurrency) {
 }
 
 // GitHub REST API GET with ETag support (GraphQL endpoint does not support ETags)
+// Last-known rate limit from X-RateLimit-* response headers (authoritative per GH Support)
+let _lastKnownRL = { remaining: null, limit: null, reset: null, updatedAt: null };
+
 // Secondary rate limit circuit breaker — persisted to disk so restarts don't clear it
 const BACKOFF_FILE = process.env.BACKOFF_FILE || '/data/gh-backoff.json';
 let _ghBackoffUntil = 0;
@@ -95,11 +98,17 @@ function githubGet(apiPath, extraHeaders = {}) {
           } else if (res.statusCode === 200) {
             resetGithubBackoff();
           }
+          const rlRemaining = parseInt(res.headers['x-ratelimit-remaining'] ?? '-1');
+          const rlLimit     = parseInt(res.headers['x-ratelimit-limit'] ?? '-1');
+          const rlReset     = parseInt(res.headers['x-ratelimit-reset'] ?? '0');
+          if (rlRemaining >= 0 && rlLimit > 0) {
+            _lastKnownRL = { remaining: rlRemaining, limit: rlLimit, reset: rlReset, updatedAt: Date.now() };
+          }
           resolve({
             status: res.statusCode,
             etag: res.headers['etag'] || null,
             link: res.headers['link'] || null,
-            rateRemaining: parseInt(res.headers['x-ratelimit-remaining'] ?? '-1'),
+            rateRemaining: rlRemaining,
             body,
           });
         });
@@ -1190,15 +1199,13 @@ app.get('/metrics', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'metrics.html'));
 });
 
-app.get('/api/rate-limit', async (req, res) => {
-  try {
-    const rl = await githubGet('/rate_limit');
-    if (rl.status !== 200) return res.status(rl.status).json({ success: false });
-    const data = JSON.parse(rl.body);
-    res.json({ success: true, resources: data.resources, cached: prListCache.rateInfo || null });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+app.get('/api/rate-limit', (req, res) => {
+  res.json({
+    success: true,
+    fromHeaders: true,
+    rl: _lastKnownRL.remaining !== null ? _lastKnownRL : null,
+    cached: prListCache.rateInfo || null,
+  });
 });
 
 app.get('/api/health', (req, res) => {
@@ -1243,9 +1250,8 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     if (aborted) return;
 
-    // Rate limit check removed — the REST /rate_limit call was itself triggering
-    // the secondary rate limit circuit breaker after the GraphQL batch succeeded.
-    const restRL = null;
+    // Use last-known rate limit from response headers (GH Support: more accurate than /rate_limit endpoint)
+    const restRL = _lastKnownRL.remaining !== null ? { ..._lastKnownRL } : null;
 
     // Guard: don't overwrite a healthy cache with an empty result — GitHub network blip
     if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
