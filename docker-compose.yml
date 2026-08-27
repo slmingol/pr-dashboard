@@ -39,6 +39,7 @@ services:
       - ghreportToken=${GH_TOKEN:-}
       # List of repositories for ghreport to monitor (space-separated)
       - subscribedRepos=${subscribedRepos:-}
+      - APP_VERSION=${BUILD_VERSION:-dev}
     restart: unless-stopped
     networks:
       - pr-dashboard-net

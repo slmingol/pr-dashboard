@@ -1212,11 +1212,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/version', async (req, res) => {
-  const pkgVersion = process.env.APP_VERSION || require('./package.json').version;
-  let sha = 'unknown';
-  try { sha = (await execAsync('git rev-parse --short HEAD')).stdout.trim(); } catch (_) {}
-  res.json({ version: `${pkgVersion}-${sha}` });
+app.get('/api/version', (req, res) => {
+  const version = process.env.APP_VERSION || require('./package.json').version;
+  res.json({ version });
 });
 
 // SSE endpoint for PR list refresh — now uses concurrent GraphQL instead of ghreport binary
@@ -1293,11 +1291,9 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 });
 
 
-app.listen(PORT, '0.0.0.0', async () => {
-  const pkgVersion = require('./package.json').version;
-  let sha = 'unknown';
-  try { sha = (await execAsync('git rev-parse --short HEAD')).stdout.trim(); } catch (_) {}
-  console.log(`PR Dashboard v${pkgVersion}-${sha} running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  const version = process.env.APP_VERSION || require('./package.json').version;
+  console.log(`PR Dashboard v${version} running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   loadCacheFromDisk();
 });

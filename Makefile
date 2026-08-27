@@ -33,7 +33,7 @@ list:
 # ─── Development ─────────────────────────────────────────────────────────────
 
 up:
-	@$(COMPOSE) up -d > /dev/null 2>&1
+	@BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) up -d > /dev/null 2>&1
 
 down:
 	@$(COMPOSE) down > /dev/null 2>&1
