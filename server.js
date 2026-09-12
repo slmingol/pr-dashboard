@@ -70,7 +70,7 @@ setInterval(() => {
   for (const [ip, win] of _rlWindows) {
     if (win.every(t => now - t >= RL_WINDOW_MS)) _rlWindows.delete(ip);
   }
-}, 5 * 60_000);
+}, 5 * 60_000).unref();
 
 // Simple concurrency limiter (no external deps)
 function pLimit(concurrency) {
