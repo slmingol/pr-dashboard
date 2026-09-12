@@ -623,21 +623,44 @@ function parseFilenameFromDiff(diffLine) {
   return m ? m[1] : diffLine;
 }
 
+function buildFileNav(diffText) {
+  const files = [];
+  for (const line of diffText.split('\n')) {
+    if (line.startsWith('diff --git ')) {
+      const name = parseFilenameFromDiff(line);
+      files.push({ name, type: null });
+    } else if (files.length && line.startsWith('new file')) {
+      files[files.length - 1].type = 'new';
+    } else if (files.length && line.startsWith('deleted file')) {
+      files[files.length - 1].type = 'del';
+    }
+  }
+  if (files.length <= 1) return '';
+  const items = files.map(({ name, type }, i) => {
+    const badge = type === 'new' ? ' <span class="diff-file-badge diff-file-badge-added">+</span>'
+                : type === 'del' ? ' <span class="diff-file-badge diff-file-badge-deleted">-</span>' : '';
+    return `<a class="diff-nav-file" href="#diff-file-${i}" title="${escapeHtml(name)}">${escapeHtml(name.split('/').pop())}${badge}</a>`;
+  }).join('');
+  return `<div class="diff-file-nav" id="diff-file-nav"><button class="diff-nav-toggle" onclick="toggleDiffNav()" title="Toggle file list">&#9776; ${files.length} files</button><div class="diff-nav-list" id="diff-nav-list">${items}</div></div>`;
+}
+
 function renderUnifiedDiff(diffText) {
   const lines = diffText.split('\n');
   const parts = [];
   let leftLine = 1, rightLine = 1;
   let pendingFile = null, pendingFileType = null;
+  let fileIdx = -1;
 
   function flushFile() {
     if (pendingFile === null) return;
+    fileIdx++;
     const typeClass = pendingFileType === 'new' ? ' diff-fh-new' : pendingFileType === 'del' ? ' diff-fh-del' : '';
     const badge = pendingFileType === 'new'
       ? '<span class="diff-file-badge diff-file-badge-added">added</span>'
       : pendingFileType === 'del'
         ? '<span class="diff-file-badge diff-file-badge-deleted">deleted</span>'
         : '';
-    parts.push(`<div class="diff-file-sep${typeClass}"><span class="diff-filename">${escapeHtml(pendingFile)}</span>${badge}</div>`);
+    parts.push(`<div id="diff-file-${fileIdx}" class="diff-file-sep${typeClass}"><span class="diff-filename">${escapeHtml(pendingFile)}</span>${badge}</div>`);
     pendingFile = null;
     pendingFileType = null;
   }
@@ -695,9 +718,11 @@ function buildSideBySideDiff(diffText) {
   let leftLine = 1, rightLine = 1;
   let pendingFile = null, pendingFileType = null;
 
+  let fileIdx = -1;
   function flushFile() {
     if (pendingFile === null) return;
-    rows.push({ type: 'file', filename: pendingFile, fileType: pendingFileType });
+    fileIdx++;
+    rows.push({ type: 'file', filename: pendingFile, fileType: pendingFileType, fileIdx });
     pendingFile = null;
     pendingFileType = null;
     leftLine = 1;
@@ -768,7 +793,7 @@ function renderSideBySideHtml(rows) {
         : row.fileType === 'del'
           ? '<span class="diff-file-badge diff-file-badge-deleted">deleted</span>'
           : '';
-      return `<tr class="diff-file-sep-row"><td colspan="4"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
+      return `<tr id="diff-file-${row.fileIdx}" class="diff-file-sep-row"><td colspan="4"><span class="diff-filename">${escapeHtml(row.filename)}</span>${badge}</td></tr>`;
     }
     if (row.type === 'binary') return `<tr><td colspan="4" class="diff-binary">Binary file — not shown</td></tr>`;
     if (row.type === 'hunk') return `<tr class="diff-hunk-header"><td class="diff-split-ln diff-split-ln-hunk"></td><td colspan="2">${escapeHtml(row.content)}</td><td class="diff-split-ln diff-split-ln-hunk"></td></tr>`;
@@ -819,6 +844,16 @@ function applySyntaxHighlighting(diffText) {
   document.querySelectorAll('#diff-split-view td.diff-split-context, #diff-split-view td.diff-split-remove, #diff-split-view td.diff-split-add').forEach(el => {
     try { el.innerHTML = hljs.highlight(el.textContent, opts).value; } catch (_) {}
   });
+}
+
+function toggleDiffNav() {
+  const list = document.getElementById('diff-nav-list');
+  const nav  = document.getElementById('diff-file-nav');
+  if (!list) return;
+  const collapsed = list.style.display === 'none';
+  list.style.display = collapsed ? '' : 'none';
+  nav.classList.toggle('diff-nav-collapsed', !collapsed);
+  try { localStorage.setItem('diffNavCollapsed', collapsed ? '0' : '1'); } catch (_) {}
 }
 
 function switchDiffView(view) {
@@ -902,6 +937,7 @@ async function viewDiff(owner, repo, number) {
             <button class="btn btn-small btn-muted diff-close-btn" onclick="hideModal()" title="Close">&times;</button>
           </div>
         </div>
+        ${buildFileNav(data.diff)}
         <div class="diff-scroll-area">
           <div id="diff-unified-view" class="diff-container">${unifiedHtml}</div>
           <div id="diff-split-view" class="diff-container" style="display:none">${splitHtml}</div>

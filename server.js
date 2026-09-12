@@ -9,6 +9,69 @@ const https = require('https');
 const execAsync = promisify(exec);
 const app = express();
 
+// ── Structured logger ────────────────────────────────────────────────────────
+const isProd = process.env.NODE_ENV === 'production';
+const log = {
+  _write(level, msg, ctx) {
+    if (isProd) {
+      process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...ctx }) + '\n');
+    } else {
+      const tag = { info: 'INFO', warn: 'WARN', error: 'ERR ' }[level];
+      const extra = ctx && Object.keys(ctx).length ? ' ' + JSON.stringify(ctx) : '';
+      process.stdout.write(`[${tag}] ${msg}${extra}\n`);
+    }
+  },
+  info:  (msg, ctx = {}) => log._write('info',  msg, ctx),
+  warn:  (msg, ctx = {}) => log._write('warn',  msg, ctx),
+  error: (msg, ctx = {}) => log._write('error', msg, ctx),
+};
+
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Only allow requests from the same origin (localhost / same host).
+// OPTIONS preflight gets a 204; cross-origin requests are rejected with 403.
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+);
+app.use((req, res, next) => {
+  const origin = req.headers['origin'];
+  if (!origin) return next(); // same-origin or non-browser request
+  const host = req.headers['host'] || '';
+  const originHost = (() => { try { return new URL(origin).host; } catch { return ''; } })();
+  const allowed = originHost === host || ALLOWED_ORIGINS.has(origin);
+  if (!allowed) return res.status(403).json({ error: 'Cross-origin request denied' });
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+// ── Rate limiter ─────────────────────────────────────────────────────────────
+// Sliding 60s window, max 120 API requests per IP.
+const _rlWindows = new Map();
+const RL_MAX = parseInt(process.env.RL_MAX || '120');
+const RL_WINDOW_MS = 60_000;
+app.use('/api/', (req, res, next) => {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const win = _rlWindows.get(ip) || [];
+  const trimmed = win.filter(t => now - t < RL_WINDOW_MS);
+  if (trimmed.length >= RL_MAX) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ error: 'Rate limit exceeded — max 120 req/min per IP' });
+  }
+  trimmed.push(now);
+  _rlWindows.set(ip, trimmed);
+  next();
+});
+// Prune stale IP entries every 5 minutes to avoid unbounded growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, win] of _rlWindows) {
+    if (win.every(t => now - t >= RL_WINDOW_MS)) _rlWindows.delete(ip);
+  }
+}, 5 * 60_000);
+
 // Simple concurrency limiter (no external deps)
 function pLimit(concurrency) {
   let active = 0;
@@ -39,7 +102,7 @@ try {
   if (saved.backoffUntil > Date.now()) {
     _ghBackoffUntil = saved.backoffUntil;
     _ghBackoffMs = saved.backoffMs || 60 * 1000;
-    console.warn(`Loaded rate limit backoff from disk — paused until ${new Date(_ghBackoffUntil).toISOString()}`);
+    log.warn(`Loaded rate limit backoff from disk — paused until ${new Date(_ghBackoffUntil).toISOString()}`);
   }
 } catch (_) {}
 
@@ -54,7 +117,7 @@ function recordSecondaryRateLimit(resetHeader) {
   const localUntil = Date.now() + _ghBackoffMs;
   _ghBackoffUntil = Math.max(resetMs, localUntil);
   const backoffSec = Math.ceil((_ghBackoffUntil - Date.now()) / 1000);
-  console.warn(`GitHub rate limit hit — backing off ${backoffSec}s until ${new Date(_ghBackoffUntil).toISOString()}`);
+  log.warn(`GitHub rate limit hit — backing off ${backoffSec}s until ${new Date(_ghBackoffUntil).toISOString()}`);
   _ghBackoffMs = Math.min(_ghBackoffMs * 2, GH_BACKOFF_MAX);
   saveBackoffToDisk();
 }
@@ -272,13 +335,13 @@ async function fetchAllOpenPRsFromGitHub(repos, onProgress) {
         const parsed = JSON.parse(res.body);
         if (parsed.data) gqlData = parsed.data;
         if (parsed.errors) {
-          console.warn('GraphQL partial errors:', parsed.errors.map(e => e.message).join('; '));
+          log.warn('GraphQL partial errors:', parsed.errors.map(e => e.message).join('; '));
         }
       } else {
-        console.warn(`GraphQL batch HTTP ${res.status}`);
+        log.warn(`GraphQL batch HTTP ${res.status}`);
       }
     } catch (err) {
-      console.warn('GraphQL batch error:', err.message);
+      log.warn('GraphQL batch error:', err.message);
     }
 
     for (let i = 0; i < batch.length; i++) {
@@ -377,7 +440,7 @@ async function getCurrentUser() {
       return _cachedUser;
     }
   } catch (_) {}
-  console.error('Error getting current user: all methods failed');
+  log.error('Error getting current user: all methods failed');
   _cachedUser = null;
   _cachedUserFailed = true;
   _cachedUserAt = Date.now();
@@ -422,7 +485,7 @@ async function loadCacheFromDisk() {
         loaded++;
       }
     }
-    console.log(`Review cache: loaded ${loaded} valid entries from ${CACHE_FILE}`);
+    log.info(`Review cache: loaded ${loaded} valid entries from ${CACHE_FILE}`);
   } catch (_) { /* missing or corrupt — start fresh */ }
 
   // PR list cache — prevents GitHub calls immediately after a restart
@@ -433,7 +496,7 @@ async function loadCacheFromDisk() {
       prListCache.prs = saved.prs;
       prListCache.fetchedAt = saved.fetchedAt;
       prListCache.rateInfo = saved.rateInfo || null;
-      console.log(`PR list cache: loaded ${saved.prs.length} PRs from ${PR_LIST_CACHE_FILE}`);
+      log.info(`PR list cache: loaded ${saved.prs.length} PRs from ${PR_LIST_CACHE_FILE}`);
     }
   } catch (_) { /* missing or corrupt — start fresh */ }
 }
@@ -443,7 +506,7 @@ async function saveCacheToDisk() {
     const entries = Object.fromEntries(reviewCache.entries());
     await fs.writeFile(CACHE_FILE, JSON.stringify(entries));
   } catch (err) {
-    console.warn('Could not save review cache to disk:', err.message);
+    log.warn('Could not save review cache to disk:', err.message);
   }
 }
 
@@ -455,7 +518,7 @@ async function savePrListCacheToDisk() {
       rateInfo: prListCache.rateInfo,
     }));
   } catch (err) {
-    console.warn('Could not save PR list cache to disk:', err.message);
+    log.warn('Could not save PR list cache to disk:', err.message);
   }
 }
 
@@ -524,12 +587,12 @@ async function fetchReviewStatusGraphQL(prs, username) {
       if (res.status === 200) {
         const parsed = JSON.parse(res.body);
         if (parsed.data) gqlData = parsed.data;
-        if (parsed.errors) console.warn('Review GraphQL errors:', parsed.errors.map(e => e.message).join('; '));
+        if (parsed.errors) log.warn('Review GraphQL errors:', parsed.errors.map(e => e.message).join('; '));
       } else {
-        console.warn(`Review GraphQL batch HTTP ${res.status}`);
+        log.warn(`Review GraphQL batch HTTP ${res.status}`);
       }
     } catch (err) {
-      console.warn('Review GraphQL batch error:', err.message);
+      log.warn('Review GraphQL batch error:', err.message);
     }
 
     for (let i = 0; i < batch.length; i++) {
@@ -578,7 +641,7 @@ async function fetchReviewStatusGraphQL(prs, username) {
 
   const fetched = Object.keys(results).length;
   const errors = prs.length - fetched;
-  console.log(`GraphQL reviews: ${fetched} fetched, ${errors} errors — ${prs.length} misses total`);
+  log.info(`GraphQL reviews: ${fetched} fetched, ${errors} errors — ${prs.length} misses total`);
   return { results };
 }
 
@@ -694,13 +757,13 @@ async function fetchReviewStatusRest(prs, username) {
       fetched++;
       })()]);
     } catch (err) {
-      console.error(`REST fetch error for ${key}: ${err.message}`);
+      log.error(`REST fetch error for ${key}: ${err.message}`);
       errors++;
       restErrors.add(key);
     }
   })));
 
-  console.log(`REST+ETag: ${fetched} fetched, ${notModified} not-modified (304), ${errors} errors — ${prs.length} misses total`);
+  log.info(`REST+ETag: ${fetched} fetched, ${notModified} not-modified (304), ${errors} errors — ${prs.length} misses total`);
   return { results, restErrors };
 }
 
@@ -713,7 +776,7 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
   // Check cache first
   const cached = reviewCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-    console.log(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+    log.info(`PR ${cacheKey}: Using cached review status (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
     return { ...cached.status, cachedAt: cached.timestamp };
   }
   
@@ -736,15 +799,14 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
       // Log all reviews for debugging
       const allUserReviews = data.reviews.filter(r => r.author && r.author.login && r.author.login === username);
       if (allUserReviews.length > 0) {
-        console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username}:`, 
-          allUserReviews.map(r => `${r.state} (${r.submittedAt})`).join(', '));
+        log.info(`PR ${owner}/${repo}#${number}: All reviews by ${username}: ${allUserReviews.map(r => `${r.state} (${r.submittedAt})`).join(', ')}`);
       }
       
       const prMeta = { title: data.title, author: data.author, state: data.state, reviewDecision: data.reviewDecision, isDraft: data.isDraft || false };
 
       if (userReviews.length > 0) {
         const latestReview = userReviews[0];
-        console.log(`PR ${owner}/${repo}#${number}: Using review state: ${latestReview.state} from ${latestReview.submittedAt}`);
+        log.info(`PR ${owner}/${repo}#${number}: Using review state: ${latestReview.state} from ${latestReview.submittedAt}`);
         result = {
           hasReviewed: true,
           state: latestReview.state, // APPROVED, CHANGES_REQUESTED, COMMENTED
@@ -754,7 +816,7 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
         };
       } else if (allUserReviews.length > 0) {
         // All reviews were dismissed - treat as not reviewed
-        console.log(`PR ${owner}/${repo}#${number}: All reviews by ${username} were dismissed`);
+        log.info(`PR ${owner}/${repo}#${number}: All reviews by ${username} were dismissed`);
         result = { hasReviewed: false, updatedAt: data.updatedAt, allDismissed: true, prMeta };
       } else {
         result = { hasReviewed: false, updatedAt: data.updatedAt, prMeta };
@@ -781,18 +843,18 @@ async function checkUserReview(owner, repo, number, username, retries = 2) {
     if ((error.message.includes('connection refused') || error.message.includes('ECONNREFUSED') || 
          error.message.includes('timeout')) && retries > 0) {
       const delay = (3 - retries) * 1000; // 1s, 2s
-      console.log(`PR ${cacheKey}: Connection error, retrying in ${delay}ms (${retries} retries left)...`);
+      log.info(`PR ${cacheKey}: Connection error, retrying in ${delay}ms (${retries} retries left)...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return checkUserReview(owner, repo, number, username, retries - 1);
     }
     
     // If we have cached data (even if expired), use it as fallback
     if (cached) {
-      console.warn(`PR ${cacheKey}: Using stale cache due to error (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      log.warn(`PR ${cacheKey}: Using stale cache due to error (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
       return { ...cached.status, stale: true, cachedAt: cached.timestamp };
     }
     
-    console.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
+    log.error(`Error checking review for PR ${owner}/${repo}#${number}:`, error.message);
     return { hasReviewed: false, updatedAt: null, error: true };
   }
 }
@@ -872,7 +934,7 @@ app.get('/api/team-members', async (req, res) => {
     }
     throw new Error(`HTTP ${r.status}`);
   } catch (error) {
-    console.error('Error fetching team members:', error.message);
+    log.error('Error fetching team members:', error.message);
     // Return stale cache on error rather than empty list
     if (_cachedTeamMembers) return res.json({ success: true, members: _cachedTeamMembers });
     res.status(500).json({ success: false, error: error.message, members: [] });
@@ -939,7 +1001,7 @@ app.get('/api/prs', async (req, res) => {
         const result = await prListFetchInFlight;
         prs = result.prs;
         if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
-          console.warn(`fetchAllOpenPRs returned 0; keeping cached ${prListCache.prs.length} PRs`);
+          log.warn(`fetchAllOpenPRs returned 0; keeping cached ${prListCache.prs.length} PRs`);
           prs = prListCache.prs;
         } else {
           prListCache.prs = prs;
@@ -955,7 +1017,7 @@ app.get('/api/prs', async (req, res) => {
     
     // Get current user and check reviews
     const currentUser = await getCurrentUser();
-    console.log(`Current authenticated user: ${currentUser}`);
+    log.info(`Current authenticated user: ${currentUser}`);
     
     let hitCount = 0, missCount = 0, ghFetchMs = 0;
 
@@ -983,7 +1045,7 @@ app.get('/api/prs', async (req, res) => {
       // Stale entries outside the cap are served from cache; they'll refresh next call.
       const MAX_REVIEW_BATCH = 20;
       const missesToFetch = misses.slice(0, MAX_REVIEW_BATCH);
-      console.log(`Review cache: ${hitCount} hits, ${missCount} misses (fetching ${missesToFetch.length})`);
+      log.info(`Review cache: ${hitCount} hits, ${missCount} misses (fetching ${missesToFetch.length})`);
 
       // Fetch misses via GraphQL batch — 20 PRs → 1 request instead of 60 REST calls.
       // Skip if another batch is already running — serve stale cache for this request.
@@ -998,7 +1060,7 @@ app.get('/api/prs', async (req, res) => {
           reviewBatchInFlight = false;
         }
       } else if (missesToFetch.length > 0) {
-        console.log(`Review batch already in flight — serving cached data for ${missesToFetch.length} misses`);
+        log.info(`Review batch already in flight — serving cached data for ${missesToFetch.length} misses`);
       }
 
       // GraphQL results go directly into hits; anything not returned falls through to gh fallback.
@@ -1011,7 +1073,7 @@ app.get('/api/prs', async (req, res) => {
       // fall back to gh pr view which uses the gh CLI.
       const stillMissing = missesToFetch.filter(pr => !hits[`${pr.repo}#${pr.number}`]);
       if (stillMissing.length > 0) {
-        console.log(`Falling back to gh pr view for ${stillMissing.length} PRs`);
+        log.info(`Falling back to gh pr view for ${stillMissing.length} PRs`);
         await Promise.all(stillMissing.map(async pr => {
           const [owner, repo] = pr.repo.split('/');
           const key = `${pr.repo}#${pr.number}`;
@@ -1133,7 +1195,7 @@ app.get('/api/pr/:owner/:repo/:number/diff', async (req, res) => {
     const diff = await fetchDiffViaGit(owner, repo, number);
     res.json({ success: true, diff });
   } catch (error) {
-    console.error(`Diff fetch failed for ${owner}/${repo}#${number}:`, error.message);
+    log.error(`Diff fetch failed for ${owner}/${repo}#${number}:`, error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1180,10 +1242,10 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
       cmd += ` --body ${JSON.stringify(body)}`;
     }
     
-    console.log(`Executing review command: ${cmd}`);
+    log.info(`Executing review command: ${cmd}`);
     const { stdout, stderr } = await execAsync(cmd);
-    console.log(`Review command output: ${stdout}`);
-    if (stderr) console.log(`Review command stderr: ${stderr}`);
+    log.info(`Review command output: ${stdout}`);
+    if (stderr) log.warn(`Review command stderr: ${stderr}`);
 
     // Update cache immediately with the known new state — avoids a gh pr view
     // round-trip on the next fetch for repos that can't reach GitHub directly.
@@ -1198,11 +1260,11 @@ app.post('/api/pr/:owner/:repo/:number/review', async (req, res) => {
       prMeta: existing?.status?.prMeta || null,
     };
     reviewCache.set(cacheKey, { status: newStatus, timestamp: Date.now(), prEtag: existing?.prEtag || null, reviewsEtag: null, rawPr: existing?.rawPr || null, rawReviews: null });
-    console.log(`Updated cache for ${cacheKey} with state ${newStatus.state}`);
+    log.info(`Updated cache for ${cacheKey} with state ${newStatus.state}`);
 
     res.json({ success: true, output: stdout });
   } catch (error) {
-    console.error(`Review command failed: ${error.message}`);
+    log.error(`Review command failed: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1267,7 +1329,7 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 
     // Guard: don't overwrite a healthy cache with an empty result — GitHub network blip
     if (prs.length === 0 && prListCache.prs && prListCache.prs.length > 0) {
-      console.warn(`Refresh returned 0 PRs but cache has ${prListCache.prs.length}; keeping old cache`);
+      log.warn(`Refresh returned 0 PRs but cache has ${prListCache.prs.length}; keeping old cache`);
       sendProgress(100, `Refresh returned 0 PRs — keeping previous ${prListCache.prs.length} PRs`);
       res.write(`data: ${JSON.stringify({ complete: true, prCount: prListCache.prs.length, warn: 'zero_prs_rejected' })}\n\n`);
       res.end();
@@ -1287,37 +1349,44 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
         `${pr.url}: createdAt ${new Date(pr.createdAt).toISOString()}`
       ).join('\n') + '\n';
       await fs.writeFile(outputPath, content, 'utf-8').catch(e =>
-        console.warn('Could not write ghreport output file:', e.message)
+        log.warn('Could not write ghreport output file:', e.message)
       );
     }
 
-    console.log(`PR list fetch complete. Found ${prs.length} open PRs across ${repos.length} repos (${listHits} cached / ${listMisses} fetched).`);
+    log.info(`PR list fetch complete. Found ${prs.length} open PRs across ${repos.length} repos (${listHits} cached / ${listMisses} fetched).`);
     sendProgress(100, `Complete! Found ${prs.length} open PRs (${listHits}/${repos.length} repos unchanged).`);
     sendEvent({ success: true, prCount: prs.length, complete: true });
 
   } catch (error) {
-    console.error('GitHub GraphQL fetch failed:', error.message);
+    log.error('GitHub GraphQL fetch failed:', error.message);
     sendEvent({ error: true, message: error.message });
     res.end();
   }
 });
 
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = process.env.NODE_ENV !== 'test' ? app.listen(PORT, '0.0.0.0', () => {
   const version = process.env.APP_VERSION || require('./package.json').version;
-  console.log(`PR Dashboard v${version} running on http://localhost:${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  log.info(`PR Dashboard v${version} running on http://localhost:${PORT}`);
+  log.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   loadCacheFromDisk();
-});
+}) : null;
 
 function shutdown(signal) {
-  console.log(`${signal} received — shutting down gracefully`);
+  log.info(`${signal} received — shutting down gracefully`);
   server.close(() => {
-    console.log('HTTP server closed');
+    log.info('HTTP server closed');
     process.exit(0);
   });
   // Force-exit if connections don't drain within 10s
-  setTimeout(() => { console.error('Shutdown timeout — forcing exit'); process.exit(1); }, 10000);
+  setTimeout(() => { log.error('Shutdown timeout — forcing exit'); process.exit(1); }, 10000);
 }
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+if (process.env.NODE_ENV !== 'test') {
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+// Export utilities for testing (no-op in production)
+if (typeof module !== 'undefined') {
+  module.exports = { parseCiStatus, parseNextLink, app };
+}
