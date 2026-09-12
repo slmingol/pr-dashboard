@@ -1,4 +1,4 @@
-.PHONY: up down build prod restart logs watch shell clean list
+.PHONY: up down build rebuild prod restart logs watch shell clean list
 
 # Auto-detect podman or docker
 RUNTIME := $(shell command -v podman 2>/dev/null | xargs basename 2>/dev/null || echo docker)
@@ -24,7 +24,8 @@ list:
 	@printf "  \033[32mwatch\033[0m     Tail logs indefinitely (re-attaches on restart)\n"
 	@printf "  \033[32mshell\033[0m     Exec into running container\n"
 	@printf "\n\033[1mProduction\033[0m\n"
-	@printf "  \033[33mbuild\033[0m     Full rebuild without override mounts\n"
+	@printf "  \033[33mbuild\033[0m     Build with layer cache (fast)\n"
+	@printf "  \033[33mrebuild\033[0m   Build with --no-cache (clean slate)\n"
 	@printf "  \033[33mprod\033[0m      Alias for build\n"
 	@printf "\n\033[1mMaintenance\033[0m\n"
 	@printf "  \033[31mclean\033[0m     Remove container and image\n"
@@ -55,6 +56,12 @@ shell:
 build:
 	@printf "Building $(BUILD_VERSION)... "; \
 	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml up -d --build > /dev/null 2>&1 \
+	&& printf "done.\n" || (printf "FAILED\n"; exit 1)
+
+rebuild:
+	@printf "Rebuilding $(BUILD_VERSION) (no cache)... "; \
+	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml build --no-cache > /dev/null 2>&1 \
+	&& BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) -f docker-compose.yml up -d > /dev/null 2>&1 \
 	&& printf "done.\n" || (printf "FAILED\n"; exit 1)
 
 prod: build
