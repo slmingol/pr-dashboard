@@ -64,12 +64,12 @@ function resetGithubBackoff() {
   saveBackoffToDisk();
 }
 
-function githubGet(apiPath, extraHeaders = {}) {
+async function githubGet(apiPath, extraHeaders = {}, _retries = 2) {
   if (Date.now() < _ghBackoffUntil) {
     const waitSec = Math.ceil((_ghBackoffUntil - Date.now()) / 1000);
-    return Promise.resolve({ status: 429, body: `{"message":"secondary rate limit backoff — retry in ${waitSec}s"}`, etag: null, link: null, rateRemaining: -1 });
+    return { status: 429, body: `{"message":"secondary rate limit backoff — retry in ${waitSec}s"}`, etag: null, link: null, rateRemaining: -1 };
   }
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
     const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
     const req = https.request(
       {
@@ -118,6 +118,12 @@ function githubGet(apiPath, extraHeaders = {}) {
     req.setTimeout(12000, () => req.destroy(new Error('GitHub API timeout')));
     req.end();
   });
+  // Retry once on transient 5xx (not 429/403 — those are intentional)
+  if (result.status >= 500 && _retries > 0) {
+    await new Promise(r => setTimeout(r, 1000));
+    return githubGet(apiPath, extraHeaders, _retries - 1);
+  }
+  return result;
 }
 // POST to the GitHub API (used for GraphQL). Same circuit-breaker as githubGet.
 function githubPost(apiPath, body) {
@@ -586,12 +592,17 @@ async function fetchReviewStatusRest(prs, username) {
   const restErrors = new Set(); // keys that failed — callers should use gh fallback
   let fetched = 0, notModified = 0, errors = 0;
 
+  const PR_TIMEOUT_MS = 20000;
   await Promise.all(prs.map(pr => limit(async () => {
     const [owner, repo] = pr.repo.split('/');
     const key = `${pr.repo}#${pr.number}`;
     const cached = reviewCache.get(key); // may be stale — that's why it's a miss
 
     try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`PR timeout: ${key}`)), PR_TIMEOUT_MS)
+      );
+      await Promise.race([timeout, (async () => {
       const prHeaders = cached?.prEtag ? { 'If-None-Match': cached.prEtag } : {};
       // reviewsEtag is only set for single-page responses; null means multi-page (always re-fetch)
       const rvHeaders = cached?.reviewsEtag ? { 'If-None-Match': cached.reviewsEtag } : {};
@@ -681,6 +692,7 @@ async function fetchReviewStatusRest(prs, username) {
       });
       results[key] = status;
       fetched++;
+      })()]);
     } catch (err) {
       console.error(`REST fetch error for ${key}: ${err.message}`);
       errors++;
@@ -1291,9 +1303,21 @@ app.get('/api/refresh-ghreport-stream', async (req, res) => {
 });
 
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   const version = process.env.APP_VERSION || require('./package.json').version;
   console.log(`PR Dashboard v${version} running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   loadCacheFromDisk();
 });
+
+function shutdown(signal) {
+  console.log(`${signal} received — shutting down gracefully`);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+  // Force-exit if connections don't drain within 10s
+  setTimeout(() => { console.error('Shutdown timeout — forcing exit'); process.exit(1); }, 10000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
