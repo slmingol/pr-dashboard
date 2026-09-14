@@ -1750,6 +1750,7 @@ async function addRepo(repo) {
     const data = await res.json();
     if (data.success) {
       subscribedRepos = data.repos;
+      document.getElementById('stat-repos').textContent = subscribedRepos.length;
       showToast(data.alreadyExists ? `${repo} already watched` : `Added ${repo}`, data.alreadyExists ? 'info' : 'success', '', 2500);
       showReposModal();
     } else {
@@ -1765,6 +1766,7 @@ async function removeRepo(repo) {
     const data = await res.json();
     if (data.success) {
       subscribedRepos = data.repos;
+      document.getElementById('stat-repos').textContent = subscribedRepos.length;
       showToast(`Removed ${repo}`, 'info', '', 2500);
       showReposModal();
     } else {
