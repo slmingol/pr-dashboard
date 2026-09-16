@@ -1120,7 +1120,10 @@ app.get('/api/prs', async (req, res) => {
         ghSamples: ghFetchTimesMs.length,
         cacheHits: hitCount,
         cacheMisses: missCount,
-        rateInfo: prListCache.rateInfo || null,
+        rateInfo: prListCache.rateInfo ? {
+          ...prListCache.rateInfo,
+          rest: _lastKnownRL.remaining !== null ? { ..._lastKnownRL } : prListCache.rateInfo.rest,
+        } : null,
       }
     });
   } catch (error) {
