@@ -226,6 +226,12 @@ function githubPost(apiPath, body) {
               }
             } catch (_) {}
           }
+          const rlRemaining = parseInt(res.headers['x-ratelimit-remaining'] ?? '-1');
+          const rlLimit     = parseInt(res.headers['x-ratelimit-limit'] ?? '-1');
+          const rlReset     = parseInt(res.headers['x-ratelimit-reset'] ?? '0');
+          if (rlRemaining >= 0 && rlLimit > 0) {
+            _lastKnownRL = { remaining: rlRemaining, limit: rlLimit, reset: rlReset, updatedAt: Date.now() };
+          }
           resolve({ status: res.statusCode, body: data });
         });
       }
