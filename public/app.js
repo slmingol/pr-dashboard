@@ -537,7 +537,7 @@ function renderPRs(prs, showHidden = false) {
               </button>
               <button class="btn btn-small btn-muted" onclick="navigator.clipboard.writeText('${pr.url}').then(()=>showToast('URL copied','success','',1500))" title="Copy PR URL to clipboard">⧉</button>
               <button class="btn btn-small btn-primary" onclick="viewDetails('${owner}', '${repoName}', '${number}')" title="View PR description and details">Details</button>
-              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}')" title="View code changes">Diff</button>
+              <button class="btn btn-small btn-info" onclick="viewDiff('${owner}', '${repoName}', '${number}', event)" title="${isWatchOnly ? 'View code changes (⌘/Ctrl+click to unlock review actions)' : 'View code changes'}">Diff</button>
               ${!isWatchOnly ? `
               <button class="btn btn-small btn-success" onclick="checkoutPR('${owner}', '${repoName}', '${number}')" title="Checkout this PR branch locally">Checkout</button>
               <button class="btn btn-small btn-warning" onclick="addComment('${owner}', '${repoName}', '${number}')" title="Add a comment to this PR">Comment</button>
@@ -876,7 +876,8 @@ function switchDiffView(view) {
 }
 
 // View diff
-async function viewDiff(owner, repo, number) {
+async function viewDiff(owner, repo, number, event) {
+  const bypassWatchOnly = event && (event.metaKey || event.ctrlKey);
   try {
     const response = await fetch(`/api/pr/${owner}/${repo}/${number}/diff`);
     const data = await response.json();
@@ -886,7 +887,7 @@ async function viewDiff(owner, repo, number) {
       const unifiedHtml = renderUnifiedDiff(data.diff);
       const splitHtml = renderSideBySideHtml(buildSideBySideDiff(data.diff));
 
-      const isWatchOnly = watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
+      const isWatchOnly = !bypassWatchOnly && watchOnlyRepos.hasOwnProperty(`${owner}/${repo}`);
 
       // Look up review status from the global PR list
       const prData = allPRs.find(p => p.repo === `${owner}/${repo}` && String(p.number) === String(number));
