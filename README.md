@@ -10,7 +10,7 @@ A containerized pull request dashboard that queries GitHub via GraphQL (PR list 
 
 ![Main dashboard](docs/screenshots/main-dashboard.png)
 
-PRs grouped by repository, with review status badges, metadata, and action buttons on each card.
+PRs grouped by repository, with review status badges, CI indicators, metadata, and action buttons on each card.
 
 ---
 
@@ -18,7 +18,7 @@ PRs grouped by repository, with review status badges, metadata, and action butto
 
 ![Stats bar](docs/screenshots/stats-bar.png)
 
-Real-time counts across Total, Visible, Hidden, Filtered, Drafts, and Repos. The **Repos** tile is clickable.
+Real-time counts across Total, Visible, Hidden, Filtered, Drafts, and Repos. The **Repos** tile is clickable and updates immediately when a repo is added or removed.
 
 ---
 
@@ -30,19 +30,25 @@ Keyword search, state filter, Show Hidden / Show Drafts toggles, and a Reset but
 
 ---
 
-### Watched repos modal
+### CI Pass filter
 
-![Repos modal](docs/screenshots/repos-modal.png)
+![CI Pass filter active](docs/screenshots/filters-ci-pass.png)
 
-Sortable table of all watched repos with open PR counts and watch-only status. Click any column header to sort.
+The **✓ CI Pass** filter pill hides every PR whose CI is pending, failing, or unknown — leaving only PRs with all checks green. Combined with the existing **✗ CI Fail** pill it covers both ends of CI triage.
 
-- **Add repo** -- type `owner/name` in the input at the top-right and press Enter or click **+ Add**. Writes directly to `~/.config/ghreport/config.yaml`; takes effect on the next refresh.
-- **Remove repo** -- click the **✕** button on any row to unsubscribe.
-- **Watch-only toggle** -- click the Watch-only cell on any row to set or clear watch-only without needing an open PR from that repo.
+![CI Pass filtered view](docs/screenshots/ci-pass-filtered.png)
 
-![Repos modal with search](docs/screenshots/repos-modal-search.png)
+With CI Pass active, only PRs that are ready for review (all checks green) are visible.
 
-Type in the filter box to narrow by org or repo name. Count updates to show matched / total.
+---
+
+### Diff modal with file navigation
+
+![Diff modal](docs/screenshots/diff-modal.png)
+
+Multi-file diffs show a file-chip nav bar at the top. Click any chip to jump directly to that file within the diff. Unified and split views are both supported; preference is saved. Approve, Approve + Comment, and Request Changes buttons are available inline — no need to leave the diff.
+
+> **Watch-only bypass**: hold `⌘` (Mac) or `Ctrl` (Linux/Win) while clicking **Diff** on a watch-only repo to unlock the review actions for that diff session.
 
 ---
 
@@ -54,44 +60,64 @@ Press `?` or click the `⌨` button in the header to open the reference modal.
 
 ---
 
+### Watched repos modal
+
+![Repos modal](docs/screenshots/repos-modal.png)
+
+Sortable table of all watched repos with open PR counts and watch-only status. Click any column header to sort.
+
+- **Add repo** — type `owner/name` in the input at the top-right and press Enter or click **+ Add**. Writes directly to `~/.config/ghreport/config.yaml`; takes effect on the next refresh. The **Repos** stat tile updates immediately.
+- **Remove repo** — click the **✕** button on any row to unsubscribe. The **Repos** tile decrements immediately.
+- **Watch-only toggle** — click the Watch-only cell on any row to set or clear watch-only without needing an open PR from that repo.
+
+![Repos modal with search](docs/screenshots/repos-modal-search.png)
+
+Type in the filter box to narrow by org or repo name. Count updates to show matched / total.
+
+---
+
 ## Features
 
 ### Core
 
-- **Consolidated PR view** -- all open PRs across monitored repos, grouped by repository with sticky headers
-- **Review status tracking** -- Approved / Changes Requested / Commented badges per PR
-- **Hide/unhide PRs** -- reduce clutter without losing context; persisted in localStorage; **Unhide All** button in the filter bar clears all hidden PRs at once
-- **Watch-only repos** -- mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal
-- **Repo management** -- add or remove watched repos directly from the UI without editing config files
-- **Team member highlighting** -- PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 60 minutes
-- **Search & filter** -- by keyword, PR state (Open/Closed/Merged), hidden status, draft status, merge conflicts, or CI failures
-- **CI/CD status indicators** -- per-PR badges for CI FAIL / CI ... / CI ✓ derived from GitHub check-runs; "CI Failures Only" filter to isolate broken PRs
-- **Merge conflict detection** -- CONFLICT badge on PRs with `mergeable_state: dirty`; "Conflicts Only" filter; state refreshed on every review status poll
-- **PR template preview** -- when opening a comment or review modal, the repo's PR template (`.github/PULL_REQUEST_TEMPLATE.md` or equivalent) is fetched and shown as a collapsible reference; cached for 1 hour per repo
-- **Statistics bar** -- real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
+- **Consolidated PR view** — all open PRs across monitored repos, grouped by repository with sticky headers
+- **Review status tracking** — Approved / Changes Requested / Commented badges per PR
+- **Hide/unhide PRs** — reduce clutter without losing context; persisted in localStorage; **Unhide All** button in the filter bar clears all hidden PRs at once
+- **Watch-only repos** — mark repos as view-only to suppress review actions; toggle per-repo from the watched repos modal; hold `⌘`/`Ctrl` while clicking **Diff** to bypass for a single diff session
+- **Repo management** — add or remove watched repos directly from the UI; the Repos stat tile updates immediately (no page reload needed)
+- **Team member highlighting** — PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 60 minutes
+- **Search & filter** — by keyword, PR state (Open/Closed/Merged), hidden status, draft status, merge conflicts, CI failures, or CI passing
+- **CI/CD status indicators** — per-PR badges for CI FAIL / CI ... / CI ✓ derived from GitHub check-runs
+- **CI Pass filter** — `✓ CI Pass` pill hides PRs with pending, failing, or unknown CI, surfacing only PRs where all checks have passed (credit: klofton)
+- **CI Fail filter** — `✗ CI Fail` pill shows only PRs with failing CI, for quick triage
+- **Merge conflict detection** — CONFLICT badge on PRs with `mergeable_state: dirty`; "Conflicts Only" filter; state refreshed on every review status poll
+- **PR template preview** — when opening a comment or review modal, the repo's PR template (`.github/PULL_REQUEST_TEMPLATE.md` or equivalent) is fetched and shown as a collapsible reference; cached for 1 hour per repo
+- **Statistics bar** — real-time counts for Total, Visible, Hidden, Filtered, Drafts, and Repos (clickable)
 
 ### Review workflow
 
 - Approve, request changes, or comment directly from the dashboard
 - Integrated comment modal (no browser prompts)
-- Review buttons in the diff view modal
+- Approve / Approve + Comment / Request Changes buttons in the diff modal — no need to close the diff first
+- `⌘/Ctrl+click` on **Diff** for watch-only repos temporarily unlocks review actions for that diff
 - PR list refreshes to reflect your new review status after submission
 
 ### PR operations
 
 - View PR details and metadata
 - View diffs with syntax highlighting (unified and split modes, preference saved)
+- **File navigation chips** in multi-file diff modals — click any chip to jump to that file
 - Copy PR URL to clipboard (⧉ button on each card)
 - Checkout PR branches locally
 - Open any PR in GitHub
 
 ### Data refresh
 
-- **Refresh Data** -- queries all monitored repositories via batched GraphQL (50 repos/query); typically ~7s for 100+ repos; streams real per-repo progress via SSE
-- **Auto-refresh** -- silently runs a full refresh on a configurable interval (30/60/90/120 min, default 30) while the tab is open; select the interval from the dropdown left of the toggle; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires; toggle with the `⏱ Auto: ON/OFF` button in the header (state and interval persist in localStorage)
-- **Reload** -- returns the cached PR list instantly (in-memory cache, 30-minute TTL matching the auto-refresh interval) without hitting GitHub
-- **Resilient caching** -- on 403/429/5xx responses, the server serves the last known PR list from its ETag cache rather than returning empty results; protects against GitHub IP outages and secondary rate limits
-- **Performance bar** -- displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
+- **Refresh Data** — queries all monitored repositories via batched GraphQL (50 repos/query); typically ~7s for 100+ repos; streams real per-repo progress via SSE
+- **Auto-refresh** — silently runs a full refresh on a configurable interval (30/60/90/120 min, default 30) while the tab is open; select the interval from the dropdown left of the toggle; manual refresh resets the countdown; perf bar shows `auto: Xm ago` after the first auto-refresh fires; toggle with the `⏱ Auto: ON/OFF` button in the header (state and interval persist in localStorage)
+- **Reload** — returns the cached PR list instantly (in-memory cache, 30-minute TTL matching the auto-refresh interval) without hitting GitHub
+- **Resilient caching** — on 403/429/5xx responses, the server serves the last known PR list from its ETag cache rather than returning empty results; protects against GitHub IP outages and secondary rate limits
+- **Performance bar** — displayed below the header after every load or refresh; click it to open a field-by-field explanation modal
 
 #### Performance bar fields
 
@@ -106,20 +132,20 @@ refresh: 15.4s · GH: 11.3s · avg: 4.3s · 0/135 cached · 122/126 repos cached
 | `avg: Xs` | Rolling average of the last 10 GH review fetch durations |
 | `N/M cached` | Review status cache: N PRs had a valid cached status (no GitHub call); M is total PRs. 304 Not Modified responses keep the cached value at zero quota cost. |
 | `N/M repos cached` | PR list ETag cache: N repos returned 304 Not Modified (unchanged since last refresh, zero quota cost); M is total watched repos |
-| `REST: N/5,000` | GitHub REST API rate limit remaining in the current hourly window. The `/rate_limit` endpoint and ETag 304 responses are exempt and do not count against this total. |
+| `REST: N/5,000` | GitHub REST API rate limit remaining in the current hourly window, updated live from `x-ratelimit-remaining` response headers on both REST and GraphQL calls. The `/rate_limit` endpoint and ETag 304 responses are exempt and do not count against this total. |
 | `auto: Xm ago` | Time since the last automatic background refresh. Only shown after the first auto-refresh fires (every 30 minutes while the tab is open). |
 
 ### Metrics page (`/metrics`)
 
 A separate analytics view covering:
 
-- **Review coverage** -- open PRs reviewed vs. pending, as a stacked percentage bar
-- **Your review activity** -- donut chart of opened / closed / approved this cycle
-- **PR age distribution** -- bar chart bucketed by age
-- **Open PRs by repo** -- stacked bars showing reviewed vs. pending per repository
-- **Review response time** -- histogram and table of time from PR open to your first review (last 45 days)
-- **Author breakdown** -- open PRs by author with reviewed/pending split
-- **GitHub API rate limits** -- REST consumption bar vs. the 5,000-request hourly window; PR list ETag cache bar showing 304 (free) vs. 200 (quota) split per refresh, with reset time and % repos skipped
+- **Review coverage** — open PRs reviewed vs. pending, as a stacked percentage bar
+- **Your review activity** — donut chart of opened / closed / approved this cycle
+- **PR age distribution** — bar chart bucketed by age
+- **Open PRs by repo** — stacked bars showing reviewed vs. pending per repository
+- **Review response time** — histogram and table of time from PR open to your first review (last 45 days)
+- **Author breakdown** — open PRs by author with reviewed/pending split
+- **GitHub API rate limits** — REST consumption bar vs. the 5,000-request hourly window; PR list ETag cache bar showing 304 (free) vs. 200 (quota) split per refresh, with reset time and % repos skipped
 
 ### UI/UX
 
@@ -127,7 +153,7 @@ A separate analytics view covering:
 - Compact single-line PR cards for maximum density
 - Toast notifications for actions
 - Keyboard shortcuts for full mouse-free operation
-- Filter preferences (search, state, show-hidden, show-drafts, conflicts-only, CI-failures-only) persist across page loads
+- Filter preferences (search, state, show-hidden, show-drafts, conflicts-only, CI-failures-only, CI-pass-only) persist across page loads
 
 ## Keyboard Shortcuts
 
@@ -149,7 +175,7 @@ Press `?` or click the `⌨` button in the header to open the in-app shortcuts r
 | `?` | Show keyboard shortcuts |
 | `Esc` | Close modal |
 
-Action keys (`a`, `x`, `c`) are silently blocked for watch-only repos.
+Action keys (`a`, `x`, `c`) are silently blocked for watch-only repos. Hold `⌘` (Mac) or `Ctrl` (Linux/Win) while clicking **Diff** on a watch-only repo to unlock review actions in the diff modal for that session.
 
 ## Prerequisites
 
@@ -183,7 +209,7 @@ subscribedRepos:
   - org/repo3
 ```
 
-Repos can also be managed directly from the dashboard: click the **Repos** stat tile to open the watched repos modal, then use the **+ Add** input or the **✕** remove buttons. Changes write back to `config.yaml` immediately.
+Repos can also be managed directly from the dashboard: click the **Repos** stat tile to open the watched repos modal, then use the **+ Add** input or the **✕** remove buttons. Changes write back to `config.yaml` immediately and the **Repos** count in the stat bar updates at once.
 
 You can also pass the list directly via `.env` (takes effect if config.yaml has no `subscribedRepos` section):
 
@@ -262,6 +288,7 @@ volumes:
 | `filterShowDrafts` | Last show-drafts checkbox state (default: off) |
 | `filterConflicts` | Last "Conflicts Only" filter state |
 | `filterCiFail` | Last "CI Failures Only" filter state |
+| `filterCiPass` | Last "CI Pass Only" filter state |
 
 ## Architecture
 
@@ -301,6 +328,10 @@ browser GET /api/prs
 
 **Review operations** (approve / request-changes / comment / checkout) use `gh` CLI subprocesses.
 
+### Rate limit tracking
+
+`x-ratelimit-remaining` / `x-ratelimit-limit` / `x-ratelimit-reset` headers are captured from every GitHub API response — both REST (`githubGet`) and GraphQL (`githubPost`). The most recent values are kept in `_lastKnownRL` in memory and injected into every `/api/prs` response so the perf bar's `REST: N/5,000` counter reflects live usage rather than a stale snapshot.
+
 ### Caching layers
 
 | Layer | TTL | Purpose |
@@ -322,7 +353,7 @@ browser GET /api/prs
 | GET | `/api/repos` | Subscribed repo list |
 | POST | `/api/repos` | Add a repo (`{ repo: "owner/name" }`) to config.yaml |
 | DELETE | `/api/repos/:owner/:name` | Remove a repo from config.yaml |
-| GET | `/api/rate-limit` | Current GitHub API rate limit status (GraphQL + REST) |
+| GET | `/api/rate-limit` | Current GitHub API rate limit status (live `_lastKnownRL` + cached rateInfo) |
 | GET | `/api/pr/:owner/:repo/:number` | PR details |
 | GET | `/api/pr/:owner/:repo/:number/diff` | PR diff |
 | POST | `/api/pr/:owner/:repo/:number/checkout` | Checkout branch locally |
@@ -362,7 +393,7 @@ With the dev server running (`make up` or `node server.js`), regenerate all scre
 node scripts/screenshot.js
 ```
 
-This uses headless Chromium via puppeteer to capture the main dashboard, stats bar, filter bar, keyboard shortcuts modal, repos modal, and repos modal with search active -- then writes them directly to `docs/screenshots/`. Commit the resulting PNGs.
+This uses headless Chromium via puppeteer to capture the main dashboard, stats bar, filter bar, CI Pass filter (bar crop + full page view), diff modal with file nav chips, keyboard shortcuts modal, repos modal, and repos modal with search active — then writes them directly to `docs/screenshots/`. Commit the resulting PNGs.
 
 ### Container dev mode
 

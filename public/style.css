@@ -112,6 +112,14 @@ header {
   align-items: center;
 }
 
+.github-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  line-height: 1;
+}
+
 #auto-refresh-interval {
   background: var(--btn-bg);
   color: var(--btn);
