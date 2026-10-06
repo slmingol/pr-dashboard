@@ -34,7 +34,7 @@ Keyword search, state filter, Show Hidden / Show Drafts toggles, and a Reset but
 
 ![CI Pass filter active](docs/screenshots/filters-ci-pass.png)
 
-The **✓ CI Pass** filter pill hides every PR whose CI is pending, failing, or unknown — leaving only PRs with all checks green. Combined with the existing **✗ CI Fail** pill it covers both ends of CI triage.
+The **✓ CI Pass** filter pill hides PRs with known CI failures or in-progress checks (FAILURE and PENDING states), leaving PRs where CI is green or not configured. Combined with the existing **✗ CI Fail** pill it covers both ends of CI triage.
 
 ![CI Pass filtered view](docs/screenshots/ci-pass-filtered.png)
 
@@ -88,7 +88,7 @@ Type in the filter box to narrow by org or repo name. Count updates to show matc
 - **Team member highlighting** — PRs authored by members of a configured GitHub team get an amber left border and a star-prefixed author badge in both the card list and diff modal header; team roster is fetched from GitHub and cached for 60 minutes
 - **Search & filter** — by keyword, PR state (Open/Closed/Merged), hidden status, draft status, merge conflicts, CI failures, or CI passing
 - **CI/CD status indicators** — per-PR badges for CI FAIL / CI ... / CI ✓ derived from GitHub check-runs
-- **CI Pass filter** — `✓ CI Pass` pill hides PRs with pending, failing, or unknown CI, surfacing only PRs where all checks have passed (credit: klofton)
+- **CI Pass filter** — `✓ CI Pass` pill hides PRs with known FAILURE or PENDING CI; passes through SUCCESS and null (no CI configured). Surfaces PRs that are safe to review without waiting for broken checks to be fixed (credit: klofton)
 - **CI Fail filter** — `✗ CI Fail` pill shows only PRs with failing CI, for quick triage
 - **Merge conflict detection** — CONFLICT badge on PRs with `mergeable_state: dirty`; "Conflicts Only" filter; state refreshed on every review status poll
 - **PR template preview** — when opening a comment or review modal, the repo's PR template (`.github/PULL_REQUEST_TEMPLATE.md` or equivalent) is fetched and shown as a collapsible reference; cached for 1 hour per repo
