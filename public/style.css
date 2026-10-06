@@ -456,6 +456,15 @@ h1 {
   background: rgba(232, 124, 115, 0.2);
 }
 
+.filter-pill-ci-pass {
+  color: var(--success);
+  background: rgba(100, 185, 130, 0.08);
+}
+
+.filter-pill-input:checked + .filter-pill-ci-pass {
+  background: rgba(100, 185, 130, 0.2);
+}
+
 .loading, .error {
   text-align: center;
   padding: 2rem;

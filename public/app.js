@@ -104,6 +104,7 @@ function saveFilterPrefs() {
   localStorage.setItem('filterShowDrafts', document.getElementById('show-drafts').checked);
   localStorage.setItem('filterConflicts', document.getElementById('filter-conflicts').checked);
   localStorage.setItem('filterCiFail', document.getElementById('filter-ci-fail').checked);
+  localStorage.setItem('filterCiPass', document.getElementById('filter-ci-pass').checked);
 }
 
 function loadFilterPrefs() {
@@ -119,6 +120,8 @@ function loadFilterPrefs() {
   document.getElementById('show-drafts').checked = showDrafts === null ? true : showDrafts === 'true';
   if (conflicts !== null) document.getElementById('filter-conflicts').checked = conflicts === 'true';
   if (ciFail !== null) document.getElementById('filter-ci-fail').checked = ciFail === 'true';
+  const ciPass = localStorage.getItem('filterCiPass');
+  if (ciPass !== null) document.getElementById('filter-ci-pass').checked = ciPass === 'true';
 }
 
 function resetFilters() {
@@ -128,7 +131,8 @@ function resetFilters() {
   document.getElementById('show-drafts').checked = false;
   document.getElementById('filter-conflicts').checked = false;
   document.getElementById('filter-ci-fail').checked = false;
-  ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts', 'filterConflicts', 'filterCiFail'].forEach(k => localStorage.removeItem(k));
+  document.getElementById('filter-ci-pass').checked = false;
+  ['filterSearch', 'filterState', 'filterShowHidden', 'filterShowDrafts', 'filterConflicts', 'filterCiFail', 'filterCiPass'].forEach(k => localStorage.removeItem(k));
   filterAndRenderPRs();
 }
 
@@ -386,6 +390,7 @@ function filterAndRenderPRs() {
   const showDrafts = document.getElementById('show-drafts').checked;
   const onlyConflicts = document.getElementById('filter-conflicts').checked;
   const onlyCiFail = document.getElementById('filter-ci-fail').checked;
+  const onlyCiPass = document.getElementById('filter-ci-pass').checked;
 
   saveFilterPrefs();
   renderLimit = Infinity;
@@ -400,7 +405,8 @@ function filterAndRenderPRs() {
     const matchesDraft = showDrafts || !pr.isDraft;
     const matchesConflict = !onlyConflicts || pr.mergeableState === 'dirty';
     const matchesCiFail = !onlyCiFail || pr.ciStatus?.state === 'FAILURE';
-    return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail;
+    const matchesCiPass = !onlyCiPass || pr.ciStatus?.state === 'SUCCESS';
+    return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail && matchesCiPass;
   });
 
   const currentIds = new Set(allPRs.map(pr => `${pr.repo}#${pr.number}`));
@@ -1653,6 +1659,7 @@ document.getElementById('show-hidden').addEventListener('change', filterAndRende
 document.getElementById('show-drafts').addEventListener('change', filterAndRenderPRs);
 document.getElementById('filter-conflicts').addEventListener('change', filterAndRenderPRs);
 document.getElementById('filter-ci-fail').addEventListener('change', filterAndRenderPRs);
+document.getElementById('filter-ci-pass').addEventListener('change', filterAndRenderPRs);
 document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
 
 document.querySelector('.close').addEventListener('click', hideModal);
