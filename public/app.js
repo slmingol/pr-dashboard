@@ -405,7 +405,7 @@ function filterAndRenderPRs() {
     const matchesDraft = showDrafts || !pr.isDraft;
     const matchesConflict = !onlyConflicts || pr.mergeableState === 'dirty';
     const matchesCiFail = !onlyCiFail || pr.ciStatus?.state === 'FAILURE';
-    const matchesCiPass = !onlyCiPass || pr.ciStatus?.state === 'SUCCESS';
+    const matchesCiPass = !onlyCiPass || !pr.ciStatus || pr.ciStatus.state === 'SUCCESS';
     return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail && matchesCiPass;
   });
 
