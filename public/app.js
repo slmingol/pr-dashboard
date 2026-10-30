@@ -405,7 +405,7 @@ function filterAndRenderPRs() {
     const matchesDraft = showDrafts || !pr.isDraft;
     const matchesConflict = !onlyConflicts || pr.mergeableState === 'dirty';
     const matchesCiFail = !onlyCiFail || pr.ciStatus?.state === 'FAILURE';
-    const matchesCiPass = !onlyCiPass || !pr.ciStatus || pr.ciStatus.state === 'SUCCESS';
+    const matchesCiPass = !onlyCiPass || pr.ciStatus == null || pr.ciStatus.state === 'SUCCESS';
     return matchesSearch && matchesState && matchesHidden && matchesDraft && matchesConflict && matchesCiFail && matchesCiPass;
   });
 
@@ -1658,8 +1658,14 @@ document.getElementById('state-filter').addEventListener('change', filterAndRend
 document.getElementById('show-hidden').addEventListener('change', filterAndRenderPRs);
 document.getElementById('show-drafts').addEventListener('change', filterAndRenderPRs);
 document.getElementById('filter-conflicts').addEventListener('change', filterAndRenderPRs);
-document.getElementById('filter-ci-fail').addEventListener('change', filterAndRenderPRs);
-document.getElementById('filter-ci-pass').addEventListener('change', filterAndRenderPRs);
+document.getElementById('filter-ci-fail').addEventListener('change', () => {
+  if (document.getElementById('filter-ci-fail').checked) document.getElementById('filter-ci-pass').checked = false;
+  filterAndRenderPRs();
+});
+document.getElementById('filter-ci-pass').addEventListener('change', () => {
+  if (document.getElementById('filter-ci-pass').checked) document.getElementById('filter-ci-fail').checked = false;
+  filterAndRenderPRs();
+});
 document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
 
 document.querySelector('.close').addEventListener('click', hideModal);

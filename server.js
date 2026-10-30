@@ -1109,7 +1109,7 @@ app.get('/api/prs', async (req, res) => {
           if (reviewStatus.prMeta.isDraft !== undefined) pr.isDraft = reviewStatus.prMeta.isDraft;
           if (reviewStatus.prMeta.createdAt) pr.createdAt = reviewStatus.prMeta.createdAt;
           if (reviewStatus.prMeta.mergeableState) pr.mergeableState = reviewStatus.prMeta.mergeableState;
-          if (reviewStatus.prMeta.ciStatus) pr.ciStatus = reviewStatus.prMeta.ciStatus;
+          if ('ciStatus' in reviewStatus.prMeta) pr.ciStatus = reviewStatus.prMeta.ciStatus;
         }
         return { ...pr, reviewStatus };
       });
