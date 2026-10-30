@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Install gh CLI, git, and Go (for ghreport)
 RUN apk add --no-cache github-cli git go
