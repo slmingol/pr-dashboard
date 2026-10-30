@@ -1103,7 +1103,6 @@ async function reviewPR(owner, repo, number, action) {
 
     if (data.success) {
       showToast('Review submitted successfully', 'success');
-      setTimeout(() => fetchPRs(), 1000);
     } else {
       showToast('Failed to submit review: ' + data.error, 'error');
       setTimeout(() => fetchPRs(), 500); // reconcile on failure too
@@ -1131,7 +1130,6 @@ async function approvePRFromDiff(owner, repo, number) {
 
     if (data.success) {
       showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
-      setTimeout(() => fetchPRs(), 1000);
     } else {
       showToast('Failed to approve: ' + data.error, 'error');
       setTimeout(() => fetchPRs(), 500);
@@ -1172,7 +1170,6 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
 
     if (data.success) {
       showToast(`✓ Approved PR #${number}`, 'success', 'Review Submitted');
-      setTimeout(() => fetchPRs(), 1000);
     } else {
       showToast('Failed to approve: ' + data.error, 'error');
       setTimeout(() => fetchPRs(), 500);
@@ -1180,6 +1177,7 @@ async function approvePRFromDiffWithComment(owner, repo, number) {
   } catch (error) {
     hideCommentModal();
     showToast('Error: ' + error.message, 'error');
+    setTimeout(() => fetchPRs(), 500);
   }
 }
 
