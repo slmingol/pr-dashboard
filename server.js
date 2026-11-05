@@ -1183,7 +1183,7 @@ async function fetchDiffViaGit(owner, repo, number) {
   );
   const { baseRefName, headRefOid } = JSON.parse(prJson);
   await execAsync(
-    `git -C "${cacheDir}" fetch -q --filter=blob:none origin "refs/pull/${number}/head:refs/pr/${number}" "refs/heads/${baseRefName}:refs/base/${baseRefName}"`,
+    `git -C "${cacheDir}" fetch -q --filter=blob:none origin "refs/pull/${number}/head:refs/pr/${number}" "+refs/heads/${baseRefName}:refs/base/${baseRefName}"`,
     { timeout: 30000 }
   );
   const { stdout: mbOut } = await execAsync(
